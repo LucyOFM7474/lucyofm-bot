@@ -1,35 +1,47 @@
-// public/script.js
-const form   = document.getElementById('form');
-const input  = document.getElementById('meciInput');
-const output = document.getElementById('output');
-const load   = document.getElementById('loading');
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.querySelector("form");
+  const input = document.querySelector("input");
+  const button = document.querySelector("button");
+  const output = document.querySelector("#output");
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const meci = input.value.trim();
-  if (!meci) return;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
 
-  load.hidden = false;
-  output.innerHTML = '';
+    const prompt = input.value.trim();
+    if (!prompt) {
+      output.innerHTML = `<span style="color:red;">Introduceți un text pentru analiză!</span>`;
+      return;
+    }
 
-  try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ meci })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Eroare server');
+    // Dezactivează butonul cât timp așteptăm răspunsul
+    button.disabled = true;
+    output.innerHTML = "Se analizează...";
 
-    const puncte = data.raspuns.split('\n').filter(l => l.trim());
-    puncte.forEach(p => {
-      const li = document.createElement('li');
-      li.textContent = p.replace(/^•\s*/, '');
-      output.appendChild(li);
-    });
-  } catch (err) {
-    output.innerHTML = `<li style="color:red">Eroare: ${err.message}</li>`;
-  } finally {
-    load.hidden = true;
-  }
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
+      });
+
+      // Dacă serverul răspunde cu eroare
+      if (!response.ok) {
+        const errorText = await response.text();
+        output.innerHTML = `<span style="color:red;">Eroare: ${errorText}</span>`;
+        button.disabled = false;
+        return;
+      }
+
+      // Parsează răspunsul corect
+      const data = await response.json();
+      output.innerHTML = `<strong>Răspuns:</strong> ${data.result}`;
+    } catch (err) {
+      console.error(err);
+      output.innerHTML = `<span style="color:red;">Eroare de rețea sau server!</span>`;
+    } finally {
+      button.disabled = false;
+    }
+  });
 });
