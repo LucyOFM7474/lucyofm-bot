@@ -1,49 +1,46 @@
-import fetch from "node-fetch";
-
 export default async function handler(req, res) {
+  // Permitem doar metoda POST
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({ error: "Metoda permisă este doar POST" });
   }
 
   try {
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const { prompt } = body;
-
+    const prompt = req.body.prompt || "";
     if (!prompt) {
-      return res.status(400).json({ error: "Promptul lipsește" });
+      return res.status(400).json({ error: "Lipsește prompt-ul de la utilizator" });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: "Cheia API nu este configurată corect" });
-    }
-
+    // Cerere către OpenAI
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-3.5-turbo",
+        model: "gpt-4o-mini",       // model rapid și optimizat
+        max_tokens: 300,           // limităm numărul de tokeni pentru planul gratuit
+        temperature: 0.7,          // creativitate moderată
         messages: [
-          { role: "system", content: "Ești un asistent care răspunde scurt și clar." },
+          { role: "system", content: "Răspunde clar și concis." },
           { role: "user", content: prompt }
-        ],
-        temperature: 0.7
-      }),
+        ]
+      })
     });
 
+    // Dacă OpenAI răspunde cu eroare
     if (!response.ok) {
-      const text = await response.text();
-      console.error("Eroare API:", text);
-      return res.status(response.status).json({ error: text });
+      const errorText = await response.text();
+      return res.status(500).json({ error: `OpenAI API a returnat eroare: ${errorText}` });
     }
 
+    // Răspuns valid de la OpenAI
     const data = await response.json();
-    res.status(200).json({ result: data.choices[0].message.content });
-  } catch (err) {
-    console.error("Eroare server:", err);
-    res.status(500).json({ error: "Eroare internă de server" });
+    const reply = data.choices?.[0]?.message?.content || "Nu am putut genera un răspuns.";
+
+    return res.status(200).json({ reply });
+
+  } catch (error) {
+    return res.status(500).json({ error: `Eroare server: ${error.message}` });
   }
 }
