@@ -1,19 +1,13 @@
 {
   "name": "lucyofm-bot",
   "version": "1.0.0",
-  "description": "Bot-ul LucyOFM pentru analize și predicții",
+  "description": "LucyOFM Bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "dotenv": "^16.4.5",
-    "openai": "^4.0.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.3"
+    "express": "^4.18.2"
   },
   "engines": {
     "node": ">=18"
