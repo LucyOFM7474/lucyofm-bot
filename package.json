@@ -1,0 +1,11 @@
+{
+  "name": "lucyofm-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "openai": "^4.52.7"
+  }
+}
