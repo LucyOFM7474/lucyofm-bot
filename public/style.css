@@ -1,19 +1,46 @@
-/* public/style.css */
-:root {
-  --bg: #0d1117;
-  --fg: #c9d1d9;
-  --accent: #1f6feb;
-  --font: system-ui, sans-serif;
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  background: var(--bg); color: var(--fg); font-family: var(--font);
-  display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem;
+  margin: 0;
+  padding: 0;
+  background: #1c1c1c;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
 }
-main { width: 100%; max-width: 480px; }
-h1 { margin-bottom: .5rem; }
-input, button { width: 100%; padding: .75rem; border: none; border-radius: 6px; }
-input { background: #161b22; color: var(--fg); margin-bottom: .5rem; }
-button { background: var(--accent); color: #fff; cursor: pointer; }
-ul { list-style: none; margin-top: 1.5rem; }
-li { background: #161b22; padding: .6rem .8rem; border-radius: 4px; margin-bottom: .5rem; line-height: 1.4; }
+
+.container {
+  text-align: center;
+}
+
+form {
+  margin-top: 20px;
+}
+
+input {
+  padding: 10px;
+  width: 250px;
+  border: none;
+  border-radius: 5px;
+}
+
+button {
+  padding: 10px 20px;
+  margin-left: 10px;
+  border: none;
+  border-radius: 5px;
+  background: #007bff;
+  color: white;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+
+#output {
+  margin-top: 20px;
+  font-size: 1.1em;
+}
