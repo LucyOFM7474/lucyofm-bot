@@ -1,6 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   const form = document.querySelector("form");
-  const input = document.querySelector("input");
+  const input = document.querySelector("#prompt");
   const button = document.querySelector("button");
   const output = document.querySelector("#output");
 
@@ -13,7 +13,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // Dezactivează butonul cât timp așteptăm răspunsul
     button.disabled = true;
     output.innerHTML = "Se analizează...";
 
@@ -26,7 +25,6 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ prompt }),
       });
 
-      // Dacă serverul răspunde cu eroare
       if (!response.ok) {
         const errorText = await response.text();
         output.innerHTML = `<span style="color:red;">Eroare: ${errorText}</span>`;
@@ -34,7 +32,6 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      // Parsează răspunsul corect
       const data = await response.json();
       output.innerHTML = `<strong>Răspuns:</strong> ${data.result}`;
     } catch (err) {
