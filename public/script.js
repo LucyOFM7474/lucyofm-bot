@@ -1,44 +1,35 @@
 document.addEventListener("DOMContentLoaded", () => {
   const form = document.querySelector("form");
-  const input = document.querySelector("#prompt");
-  const button = document.querySelector("button");
-  const output = document.querySelector("#output");
+  const input = document.querySelector("input");
+  const result = document.querySelector("#result");
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-
     const prompt = input.value.trim();
+
     if (!prompt) {
-      output.innerHTML = `<span style="color:red;">Introduceți un text pentru analiză!</span>`;
+      result.textContent = "Introdu un meci sau o analiză.";
       return;
     }
 
-    button.disabled = true;
-    output.innerHTML = "Se analizează...";
+    result.textContent = "Se analizează...";
 
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ prompt }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt })
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        output.innerHTML = `<span style="color:red;">Eroare: ${errorText}</span>`;
-        button.disabled = false;
-        return;
-      }
-
       const data = await response.json();
-      output.innerHTML = `<strong>Răspuns:</strong> ${data.result}`;
-    } catch (err) {
-      console.error(err);
-      output.innerHTML = `<span style="color:red;">Eroare de rețea sau server!</span>`;
-    } finally {
-      button.disabled = false;
+
+      if (data.error) {
+        result.textContent = `Eroare: ${data.error}`;
+      } else {
+        result.textContent = data.reply;
+      }
+    } catch (error) {
+      result.textContent = `Eroare conexiune: ${error.message}`;
     }
   });
 });
