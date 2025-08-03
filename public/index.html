@@ -1,25 +1,20 @@
-<!doctype html> 
-<html lang="ro"> 
+<!DOCTYPE html>
+<html lang="ro">
 <head>
-  <meta charset="utf-8"/>
-  <title>LucyOFM – Analize meciuri</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <link rel="stylesheet" href="/style.css"/>
-  <link rel="manifest" href="/manifest.json"/>
-  <meta name="theme-color" content="#0d1117"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LucyOFM</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main>
-    <h1>⚽ LucyOFM</h1>
-    <form id="form">
-      <input id="meciInput" type="text" placeholder="Echipa1-Echipa2" required/>
+  <div class="container">
+    <h1>LucyOFM</h1>
+    <form>
+      <input type="text" id="prompt" placeholder="Introdu meciul aici..." />
       <button type="submit">Analizează</button>
     </form>
-    <div id="loading" hidden>Se caută informații…</div>
-    <ul id="output"></ul>
-  </main>
-  <script type="module" src="/script.js"></script>
+    <div id="output"></div>
+  </div>
+  <script src="script.js"></script>
 </body>
 </html>
-
-
