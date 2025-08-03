@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Permitem doar metoda POST
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Metoda permisă este doar POST" });
   }
@@ -18,23 +17,21 @@ export default async function handler(req, res) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",       // model rapid și optimizat
-        max_tokens: 300,           // limităm numărul de tokeni pentru planul gratuit
-        temperature: 0.7,          // creativitate moderată
+        model: "gpt-4o-mini",
+        max_tokens: 300,
+        temperature: 0.7,
         messages: [
-          { role: "system", content: "Răspunde clar și concis." },
+          { role: "system", content: "Răspunde clar și concis la întrebările despre fotbal și analize." },
           { role: "user", content: prompt }
         ]
       })
     });
 
-    // Dacă OpenAI răspunde cu eroare
     if (!response.ok) {
       const errorText = await response.text();
       return res.status(500).json({ error: `OpenAI API a returnat eroare: ${errorText}` });
     }
 
-    // Răspuns valid de la OpenAI
     const data = await response.json();
     const reply = data.choices?.[0]?.message?.content || "Nu am putut genera un răspuns.";
 
