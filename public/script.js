@@ -1,34 +1,29 @@
-document.getElementById("analyzeButton")?.addEventListener("click", async () => {
-  const matchInput = document.getElementById("matchInput")?.value.trim();
+document.getElementById("send-button").addEventListener("click", async () => {
+  const input = document.getElementById("message-input");
+  const message = input.value.trim();
+  const chatBox = document.getElementById("chat-box");
 
-  if (!matchInput) {
-    alert("Scrie un meci, de exemplu: Rapid - FC Botoșani");
-    return;
-  }
+  if (!message) return;
 
-  const resultDiv = document.getElementById("result");
-  resultDiv.innerHTML = "<p><em>Se analizează...</em></p>";
+  chatBox.innerHTML = "<p><em>Se analizează, așteaptă...</em></p>";
 
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        message: `Analizează meciul ${matchInput} în 10 puncte clare, cu tot ce ai mai bun.`,
-      }),
+      body: JSON.stringify({ message }) // 👈 Aici era problema în multe versiuni!
     });
 
     const data = await response.json();
 
-    if (data?.response) {
-      resultDiv.innerHTML = `<pre style="white-space: pre-wrap">${data.response}</pre>`;
+    if (response.ok && data.response) {
+      chatBox.innerHTML = `<pre>${data.response}</pre>`;
     } else {
-      resultDiv.innerHTML = "<p><strong>Nu s-a putut genera analiza.</strong></p>";
+      chatBox.innerHTML = `<p><strong>Eroare:</strong> ${data.message || "Nu s-a putut genera analiza."}</p>`;
     }
-  } catch (err) {
-    console.error(err);
-    resultDiv.innerHTML = "<p><strong>Eroare la conexiune sau API.</strong></p>";
+  } catch (error) {
+    chatBox.innerHTML = `<p><strong>Eroare:</strong> ${error.message}</p>`;
   }
 });
