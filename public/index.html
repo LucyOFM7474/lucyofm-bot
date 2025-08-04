@@ -1,16 +1,20 @@
 <!DOCTYPE html>
 <html lang="ro">
-  <head>
-    <meta charset="UTF-8" />
-    <title>LucyOFM</title>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <h1>LucyOFM</h1>
-    <input type="text" id="matchInput" placeholder="Rapid-FC Botoșani" />
-    <button onclick="analyzeMatch()">Analizează</button>
-    <pre id="result"></pre>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LucyOFM Bot</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>LucyOFM 🧠 Analiză Meciuri</h1>
+    <textarea id="input" placeholder="Scrie meciul aici... (ex: Rapid – Botoșani)"></textarea>
+    <button id="send">Analizează</button>
+    <pre id="output">📝 Aici apare analiza în 10 puncte...</pre>
+  </div>
 
-    <script src="script.js"></script>
-  </body>
+  <script src="/script.js"></script>
+</body>
 </html>
