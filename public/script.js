@@ -1,29 +1,25 @@
-document.getElementById("send-button").addEventListener("click", async () => {
-  const input = document.getElementById("message-input");
-  const message = input.value.trim();
-  const chatBox = document.getElementById("chat-box");
-
-  if (!message) return;
-
-  chatBox.innerHTML = "<p><em>Se analizează, așteaptă...</em></p>";
+async function analyzeMatch() {
+  const input = document.getElementById("matchInput").value.trim();
+  const resultBox = document.getElementById("result");
+  resultBox.textContent = "Se analizează...";
 
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify({ message }) // 👈 Aici era problema în multe versiuni!
+      body: JSON.stringify({ meci: input }),
     });
 
     const data = await response.json();
 
-    if (response.ok && data.response) {
-      chatBox.innerHTML = `<pre>${data.response}</pre>`;
+    if (data.rezultat) {
+      resultBox.textContent = data.rezultat;
     } else {
-      chatBox.innerHTML = `<p><strong>Eroare:</strong> ${data.message || "Nu s-a putut genera analiza."}</p>`;
+      resultBox.textContent = "❌ Nu s-a putut genera analiza.";
     }
-  } catch (error) {
-    chatBox.innerHTML = `<p><strong>Eroare:</strong> ${error.message}</p>`;
+  } catch (err) {
+    resultBox.textContent = "❌ Eroare la conectare cu serverul.";
   }
-});
+}
