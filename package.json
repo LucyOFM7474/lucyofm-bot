@@ -1,15 +1,7 @@
 {
   "name": "lucyofm-bot",
-  "version": "1.0.0",
-  "description": "Bot pentru analiză de meciuri în 10 puncte",
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
-  },
+  "type": "module",
   "dependencies": {
-    "next": "13.4.19",
-    "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "openai": "^4.52.7"
   }
 }
