@@ -3,18 +3,14 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { mesaj } = req.body;
+  const { prompt } = req.body;
 
   if (!process.env.OPENAI_API_KEY) {
-    return res.status(500).json({ error: "Lipsește cheia OpenAI" });
-  }
-
-  if (!mesaj || mesaj.trim().length === 0) {
-    return res.status(400).json({ error: "Mesajul este gol" });
+    return res.status(500).json({ error: "Cheia OpenAI nu este setată!" });
   }
 
   try {
-    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -25,30 +21,26 @@ export default async function handler(req, res) {
         messages: [
           {
             role: "system",
-            content:
-              "Răspunde în română cu o analiză detaliată în 10 puncte despre meciul introdus. Fii obiectiv, profesionist și structurat clar.",
+            content: "Ești un expert în fotbal. Răspunde în 10 puncte detaliate ca analiză de meci.",
           },
           {
             role: "user",
-            content: mesaj,
+            content: prompt,
           },
         ],
-        temperature: 0.7,
       }),
     });
 
-    const data = await openaiResponse.json();
-
-    if (!openaiResponse.ok) {
-      return res.status(openaiResponse.status).json({
-        error: data.error?.message || "Eroare necunoscută de la OpenAI",
-      });
+    if (!response.ok) {
+      const error = await response.json();
+      return res.status(500).json({ error: error.error.message });
     }
 
-    const raspuns = data.choices?.[0]?.message?.content;
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "❌ Niciun răspuns generat.";
 
-    return res.status(200).json({ raspuns });
-  } catch (err) {
-    return res.status(500).json({ error: "Eroare server: " + err.message });
+    return res.status(200).json({ result: content });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Eroare necunoscută." });
   }
 }
