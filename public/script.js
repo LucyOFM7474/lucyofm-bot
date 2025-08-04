@@ -1,25 +1,30 @@
-async function analyzeMatch() {
-  const input = document.getElementById("matchInput").value.trim();
-  const resultBox = document.getElementById("result");
-  resultBox.textContent = "Se analizează...";
+document.getElementById("send").addEventListener("click", async () => {
+  const input = document.getElementById("input").value.trim();
+  const output = document.getElementById("output");
+  
+  if (!input) {
+    output.textContent = "⚠️ Te rog introdu un meci (ex: Rapid - FCSB)";
+    return;
+  }
+
+  output.textContent = "⏳ Se analizează... așteaptă răspunsul în 10 puncte.";
 
   try {
-    const response = await fetch("/api/chat", {
+    const res = await fetch("/api/chat", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ meci: input }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: input })
     });
 
-    const data = await response.json();
+    const data = await res.json();
 
-    if (data.rezultat) {
-      resultBox.textContent = data.rezultat;
-    } else {
-      resultBox.textContent = "❌ Nu s-a putut genera analiza.";
+    if (!res.ok) {
+      output.textContent = `❌ Eroare: ${data.error?.message || "necunoscută"}`;
+      return;
     }
+
+    output.textContent = data.result || "⚠️ Nu s-a generat nicio analiză.";
   } catch (err) {
-    resultBox.textContent = "❌ Eroare la conectare cu serverul.";
+    output.textContent = "💥 Eroare la conectarea cu serverul.";
   }
-}
+});
