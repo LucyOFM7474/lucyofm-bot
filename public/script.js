@@ -1,7 +1,13 @@
-document.getElementById("analyzeButton").addEventListener("click", async () => {
-  const matchInput = document.getElementById("matchInput").value.trim();
+document.getElementById("analyzeButton")?.addEventListener("click", async () => {
+  const matchInput = document.getElementById("matchInput")?.value.trim();
+
+  if (!matchInput) {
+    alert("Scrie un meci, de exemplu: Rapid - FC Botoșani");
+    return;
+  }
+
   const resultDiv = document.getElementById("result");
-  resultDiv.innerHTML = "<i>Se analizează...</i>";
+  resultDiv.innerHTML = "<p><em>Se analizează...</em></p>";
 
   try {
     const response = await fetch("/api/chat", {
@@ -9,23 +15,20 @@ document.getElementById("analyzeButton").addEventListener("click", async () => {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ meci: matchInput }),
+      body: JSON.stringify({
+        message: `Analizează meciul ${matchInput} în 10 puncte clare, cu tot ce ai mai bun.`,
+      }),
     });
 
-    if (!response.ok) {
-      throw new Error(`Eroare ${response.status}: ${response.statusText}`);
-    }
-
     const data = await response.json();
-    const text = data.message || "⚠️ Niciun rezultat întors.";
 
-    resultDiv.innerHTML = formatResponse(text);
-  } catch (error) {
-    resultDiv.innerHTML = `<span style="color:red;">Eroare: ${error.message}</span>`;
+    if (data?.response) {
+      resultDiv.innerHTML = `<pre style="white-space: pre-wrap">${data.response}</pre>`;
+    } else {
+      resultDiv.innerHTML = "<p><strong>Nu s-a putut genera analiza.</strong></p>";
+    }
+  } catch (err) {
+    console.error(err);
+    resultDiv.innerHTML = "<p><strong>Eroare la conexiune sau API.</strong></p>";
   }
 });
-
-function formatResponse(text) {
-  const puncte = text.split(/\n(?=\d+\.)/).filter(Boolean); // împarte la 1., 2., ... etc.
-  return puncte.map(p => `<p>${p.trim()}</p>`).join("");
-}
