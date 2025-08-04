@@ -1,35 +1,31 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const form = document.querySelector("form");
-  const input = document.querySelector("input");
-  const result = document.querySelector("#result");
+document.getElementById("analyzeButton").addEventListener("click", async () => {
+  const matchInput = document.getElementById("matchInput").value.trim();
+  const resultDiv = document.getElementById("result");
+  resultDiv.innerHTML = "<i>Se analizează...</i>";
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const prompt = input.value.trim();
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ meci: matchInput }),
+    });
 
-    if (!prompt) {
-      result.textContent = "Introdu un meci sau o analiză.";
-      return;
+    if (!response.ok) {
+      throw new Error(`Eroare ${response.status}: ${response.statusText}`);
     }
 
-    result.textContent = "Se analizează...";
+    const data = await response.json();
+    const text = data.message || "⚠️ Niciun rezultat întors.";
 
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt })
-      });
-
-      const data = await response.json();
-
-      if (data.error) {
-        result.textContent = `Eroare: ${data.error}`;
-      } else {
-        result.textContent = data.reply;
-      }
-    } catch (error) {
-      result.textContent = `Eroare conexiune: ${error.message}`;
-    }
-  });
+    resultDiv.innerHTML = formatResponse(text);
+  } catch (error) {
+    resultDiv.innerHTML = `<span style="color:red;">Eroare: ${error.message}</span>`;
+  }
 });
+
+function formatResponse(text) {
+  const puncte = text.split(/\n(?=\d+\.)/).filter(Boolean); // împarte la 1., 2., ... etc.
+  return puncte.map(p => `<p>${p.trim()}</p>`).join("");
+}
