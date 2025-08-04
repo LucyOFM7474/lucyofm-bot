@@ -1,30 +1,18 @@
-document.getElementById("send").addEventListener("click", async () => {
-  const input = document.getElementById("input").value.trim();
-  const output = document.getElementById("output");
-  
-  if (!input) {
-    output.textContent = "⚠️ Te rog introdu un meci (ex: Rapid - FCSB)";
-    return;
-  }
+async function analizeaza() {
+  const prompt = document.getElementById("prompt").value.trim();
+  const rezultat = document.getElementById("rezultat");
+  if (!prompt) return (rezultat.textContent = "⚠️ Introdu un meci");
 
-  output.textContent = "⏳ Se analizează... așteaptă răspunsul în 10 puncte.";
-
+  rezultat.textContent = "⏳ Se analizează...";
   try {
-    const res = await fetch("/api/chat", {
+    const r = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: input })
+      body: JSON.stringify({ prompt }),
     });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      output.textContent = `❌ Eroare: ${data.error?.message || "necunoscută"}`;
-      return;
-    }
-
-    output.textContent = data.result || "⚠️ Nu s-a generat nicio analiză.";
-  } catch (err) {
-    output.textContent = "💥 Eroare la conectarea cu serverul.";
+    const d = await r.json();
+    rezultat.textContent = d.reply || `❌ ${d.error}`;
+  } catch {
+    rezultat.textContent = "💥 Eroare rețea";
   }
-});
+}
