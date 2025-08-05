@@ -1,10 +1,5 @@
 {
   "version": 2,
-  "functions": {
-    "api/chat.js": {
-      "runtime": "nodejs18.x"
-    }
-  },
   "routes": [
     { "src": "/api/chat", "dest": "/api/chat.js" },
     { "src": "/(.*)", "dest": "/public/$1" }
