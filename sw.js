@@ -1,0 +1,1 @@
+// sw.js pentru PWA

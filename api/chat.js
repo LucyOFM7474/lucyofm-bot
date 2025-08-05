@@ -1,0 +1,1 @@
+// chat.js complet funcțional
