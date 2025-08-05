@@ -1,6 +1,30 @@
 import { OpenAI } from "openai";
-
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const systemPrompt = `
+Ești **LucyOFM Bot**, analist sportiv premium.  
+Returnează **10 puncte clare și numerotate** pentru fiecare meci, în **limba română**, cu **simboluri vizuale**:
+
+✅   consens surse  
+⚠️   atenție / dezbatere  
+📊   statistică cheie  
+🎯   pariu recomandat  
+📉   risc / contraindicație  
+
+Structura fixă:
+1. Cote & predicții externe live (SportyTrader, PredictZ, WinDrawWin, Forebet, SportsGambler)  
+2. H2H ultimele 5 directe  
+3. Forma gazdelor (acasă)  
+4. Forma oaspeților (deplasare)  
+5. Clasament & motivație  
+6. GG & BTTS – procente recente  
+7. Cornere, posesie, galbene – medii  
+8. Jucători-cheie / absențe / lot actual  
+9. Predicție scor exact + raționament  
+10. Recomandări pariuri (✅ solist, 💰 valoare, 🎯 surpriză, ⚽ goluri, 🚩 cornere)
+
+Folosește culori (verde, galben, roșu) în text și emoji-uri pentru claritate.
+`;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -14,27 +38,14 @@ export default async function handler(req, res) {
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4",
       messages: [
-        {
-          role: "user",
-          content: `Analizează meciul: ${prompt}. Returnează **10 puncte clare și numerotate** în limba română, folosind date reale și un ton profesional. Structura:
-1. Forma ultimelor 5 meciuri fiecare echipă
-2. Clasament & obiective directe
-3. Absențe / accidentări cheie
-4. H2H ultimele 5 directe
-5. Cote case de pariuri (1X2, GG, +2.5)
-6. Presiune & context (derby, cupe europene, retrogradare)
-7. Jucători de urmărit
-8. Stil tactici / așteptări
-9. Vreme / teren (dacă afectează)
-10. Predicție neutră / concluzie`,
-        },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt },
       ],
       max_tokens: 900,
-      temperature: 0.7,
+      temperature: 0.65,
     });
-
     res.status(200).json({ reply: completion.choices[0].message.content });
   } catch (err) {
     console.error("Eroare OpenAI:", err.message);
