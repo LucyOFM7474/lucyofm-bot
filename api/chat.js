@@ -1,4 +1,4 @@
-// ✅ chat.js (în folderul /api)
+// chat.js (în folderul /api)
 import { MongoClient } from "mongodb";
 
 const uri = process.env.MONGODB_URI;
