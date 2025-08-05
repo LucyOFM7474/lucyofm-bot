@@ -1,27 +1,19 @@
 <!DOCTYPE html>
 <html lang="ro">
-  <head>
-    <meta charset="UTF-8" />
-    <title>LucyOFM Bot</title>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <div class="container">
-      <h1>LucyOFM 🧠 Analiză meciuri</h1>
-      <textarea id="prompt" placeholder="Scrie meciul aici..."></textarea><!-- Buton pentru ștergere doar istoric (fără a reseta limba) -->
-<button onclick="localStorage.removeItem('history'); location.reload();" style="background:#ff4444;color:#fff;border:none;padding:6px 12px;border-radius:4px;font-size:12px;margin-top:8px;">
-  🗑️ Șterge doar istoricul (fără limbă)
-</button>
-
-<!-- Buton opțional pentru resetare limbă română -->
-<button onclick="localStorage.setItem('lang', 'ro'); location.reload();" style="background:#1976d2;color:#fff;border:none;padding:6px 12px;border-radius:4px;font-size:12px;margin-left:10px;">
-  🇷🇴 Revino la limba română
-</button>
-
-      <button onclick="analizeaza()">Analizează</button>
-      <pre id="rezultat">📝 Aici apar cele 10 puncte...</pre>
-    </div>
-    <script src="script.js"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <title>LucyOFM Bot – Analize meciuri</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+</head>
+<body>
+  <div class="container">
+    <h1>LucyOFM 🧠 Analize meciuri</h1>
+    <textarea id="prompt" placeholder="Scrie meciul aici..."></textarea>
+    <button onclick="analizeaza()">Analizează</button>
+    <button onclick="stergeIstoric()" style="background:#ff4444;color:#fff;border:none;padding:6px 12px;border-radius:4px;font-size:12px;margin-top:4px;">🗑️ Șterge istoric</button>
+    <pre id="rezultat">📝 Aici apar cele 10 puncte...</pre>
+  </div>
+  <script src="script.js"></script>
+</body>
 </html>
-
