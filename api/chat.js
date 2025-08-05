@@ -18,18 +18,26 @@ export default async function handler(req, res) {
       messages: [
         {
           role: "user",
-          content: `Analizează meciul: ${prompt} și oferă o analiză clară, structurată în exact 10 puncte numerotate.`,
+          content: `Analizează meciul: ${prompt}. Returnează **10 puncte clare și numerotate** în limba română, folosind date reale și un ton profesional. Structura:
+1. Forma ultimelor 5 meciuri fiecare echipă
+2. Clasament & obiective directe
+3. Absențe / accidentări cheie
+4. H2H ultimele 5 directe
+5. Cote case de pariuri (1X2, GG, +2.5)
+6. Presiune & context (derby, cupe europene, retrogradare)
+7. Jucători de urmărit
+8. Stil tactici / așteptări
+9. Vreme / teren (dacă afectează)
+10. Predicție neutră / concluzie`,
         },
       ],
-      max_tokens: 800,
+      max_tokens: 900,
       temperature: 0.7,
     });
 
     res.status(200).json({ reply: completion.choices[0].message.content });
   } catch (err) {
     console.error("Eroare OpenAI:", err.message);
-    res.status(err.status || 500).json({
-      error: err.message || "Eroare la procesarea cererii.",
-    });
+    res.status(500).json({ error: "Eroare la procesarea cererii." });
   }
 }
