@@ -1,53 +1,40 @@
-import { OpenAI } from "openai";
+import { MongoClient } from 'mongodb';
+import { OpenAI } from 'openai';
+
+const client = new MongoClient(process.env.MONGO_URI);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const systemPrompt = `
-Ești **LucyOFM Bot**, analist profesionist român.  
-Returnează **10 puncte clare și numerotate**, cu simboluri:
-
-✅  consens surse  
-⚠️  atenție  
-📊  statistică cheie  
-🎯  pariu recomandat  
-
-Structura fixă:
-1. Cote & predicții externe live (SportyTrader, PredictZ, WinDrawWin, Forebet, SportsGambler)
-2. H2H ultimele 5 directe
-3. Forma gazdelor (acasă)
-4. Forma oaspeților (deplasare)
-5. Clasament & motivație
-6. GG & BTTS – procente recente
-7. Cornere, posesie, galbene – medii
-8. Jucători-cheie / absențe / lot actual
-9. Predicție scor exact
-10. Recomandări pariuri (✅ solist, 💰 valoare, 🎯 surpriză, ⚽ goluri, 🚩 cornere)
-
-Folosește culori și emoji-uri pentru claritate.
-`;
-
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Metoda nu este permisă" });
-  }
+  if (req.method !== 'POST') return res.status(405).end();
 
-  const { prompt } = req.body;
-  if (!prompt?.trim()) {
-    return res.status(400).json({ error: "Introdu un meci valid" });
-  }
+  const { message, excludedPoints = [] } = req.body;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
-      ],
-      max_tokens: 900,
-      temperature: 0.7,
+    await client.connect();
+    const db = client.db("lucyofm");
+    const memory = db.collection("memory");
+
+    await memory.updateOne(
+      { user: 'Florin' },
+      { $set: { excludedPoints } },
+      { upsert: true }
+    );
+
+    const excludeText = excludedPoints.length > 0
+      ? `Ignoră punctele ${excludedPoints.join(", ")} din analiză.` : '';
+
+    const chatCompletion = await openai.chat.completions.create({
+      messages: [{ role: "user", content: `${excludeText} ${message}` }],
+      model: "gpt-4o"
     });
-    res.status(200).json({ reply: completion.choices[0].message.content });
-  } catch (err) {
-    console.error("Eroare OpenAI:", err.message);
-    res.status(500).json({ error: "Eroare la procesarea cererii." });
+
+    const reply = chatCompletion.choices[0]?.message?.content || "Eroare răspuns.";
+
+    res.status(200).json({ reply });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Eroare server" });
+  } finally {
+    await client.close();
   }
 }
