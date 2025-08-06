@@ -1,32 +1,27 @@
-import { MongoClient } from 'mongodb';
+// api/chat.js
+import { OpenAI } from "openai";
 
-const uri = process.env.MONGODB_URI;
-const client = new MongoClient(uri);
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== "POST") {
+    return res.status(405).json({ message: "Method not allowed" });
   }
 
   const { message } = req.body;
-  if (!message) {
-    return res.status(400).json({ error: 'Message is required' });
-  }
 
   try {
-    await client.connect();
-    const db = client.db('lucyofm-bot');
-    const collection = db.collection('messages');
-
-    await collection.insertOne({
-      message,
-      timestamp: new Date(),
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: message }],
     });
 
-    res.status(200).json({ response: `Am salvat mesajul: "${message}" în MongoDB.` });
+    const reply = completion.choices[0].message.content;
+    res.status(200).json({ reply });
   } catch (error) {
-    res.status(500).json({ error: 'MongoDB error', details: error.message });
-  } finally {
-    await client.close();
+    console.error("EROARE GPT:", error);
+    res.status(500).json({ reply: "Eroare server. Încearcă din nou." });
   }
 }
