@@ -1,8 +1,10 @@
 import { OpenAI } from "openai";
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export default async (req, res) => {
-  if (req.method !== "POST") return res.status(405).json({ reply: "Metodă nepermisă" });
+export default async function handler(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ reply: "Metodă nepermisă." });
+
   try {
     const { message } = req.body;
     const completion = await openai.chat.completions.create({
@@ -14,6 +16,6 @@ export default async (req, res) => {
     });
     res.status(200).json({ reply: completion.choices[0].message.content });
   } catch (e) {
-    res.status(500).json({ reply: "Eroare server" });
+    res.status(500).json({ reply: "Eroare server: " + e.message });
   }
-};
+}
