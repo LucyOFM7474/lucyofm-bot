@@ -1,10 +1,9 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/chat.js", "use": "@vercel/node" }
+    { "src": "api/chat.js", "use": "@vercel/edge-functions" }
   ],
   "routes": [
-    { "src": "/api/chat", "dest": "/api/chat.js" },
-    { "src": "/(.*)", "dest": "/index.html" }
+    { "src": "/api/chat", "dest": "api/chat.js" }
   ]
 }
