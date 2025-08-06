@@ -1,17 +1,27 @@
 async function sendMessage() {
-  const input = document.getElementById('user-input').value;
-  const responseDiv = document.getElementById('response');
+  const input = document.getElementById("user-input");
+  const text = input.value.trim();
+  if (!text) return;
 
-  responseDiv.innerHTML = "Se încarcă...";
+  addMessage("Tu", text);
+  input.value = "";
 
-  const response = await fetch('/api/chat', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ message: input })
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      messages: [{ role: "user", content: text }],
+    }),
   });
 
   const data = await response.json();
-  responseDiv.innerHTML = `<p>${data.reply}</p>`;
+  addMessage("LucyOFM", data.result || "Eroare răspuns.");
+}
+
+function addMessage(sender, text) {
+  const messages = document.getElementById("messages");
+  const msg = document.createElement("div");
+  msg.className = "message";
+  msg.innerHTML = `<strong>${sender}:</strong> ${text}`;
+  messages.appendChild(msg);
+  messages.scrollTop = messages.scrollHeight;
 }
