@@ -1,8 +1,8 @@
 {
-  "name": "lucyofm-bot",
+  "name": "lucyofm-functional-bot",
   "version": "1.0.0",
   "type": "module",
   "dependencies": {
-    "openai": "^4.55.0"
+    "openai": "^4.26.0"
   }
 }
