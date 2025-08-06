@@ -2,7 +2,7 @@ async function sendMessage() {
   const input = document.getElementById('user-input').value;
   const responseDiv = document.getElementById('response');
 
-  responseDiv.innerHTML = "Se încarcă răspunsul...";
+  responseDiv.innerHTML = "Se încarcă...";
 
   const response = await fetch('/api/chat', {
     method: 'POST',
