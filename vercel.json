@@ -1,9 +1,14 @@
 {
   "version": 2,
-  "builds": [
-    { "src": "api/chat.js", "use": "@vercel/edge-functions" }
-  ],
+  "functions": {
+    "api/chat.js": {
+      "runtime": "edge"
+    }
+  },
   "routes": [
-    { "src": "/api/chat", "dest": "api/chat.js" }
+    {
+      "src": "/api/chat",
+      "dest": "api/chat.js"
+    }
   ]
 }
