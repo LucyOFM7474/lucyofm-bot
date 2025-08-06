@@ -1,11 +1,8 @@
 {
-  "name": "lucyofm-mongodb-bot",
+  "name": "lucyofm-bot",
   "version": "1.0.0",
-  "scripts": {
-    "dev": "vercel dev",
-    "start": "vercel dev"
-  },
+  "type": "module",
   "dependencies": {
-    "mongodb": "^5.7.0"
+    "openai": "^4.55.0"
   }
 }
