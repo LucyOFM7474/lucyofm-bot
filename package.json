@@ -1,9 +1,0 @@
-{
-  "name": "lucyofm-bot",
-  "version": "1.0.0",
-  "type": "module",
-  "dependencies": {
-    "openai": "^4.26.0",
-    "mongodb": "^6.5.0"
-  }
-}
