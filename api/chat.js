@@ -1,52 +1,44 @@
-import OpenAI from "openai";
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-const systemPrompt = `
-Ești **LucyOFM Bot**, analist profesionist român.  
-Returnează **10 puncte clare și numerotate**, cu simboluri:
-
-✅  consens surse  
-⚠️  atenție  
-📊  statistică cheie  
-🎯  pariu recomandat  
-
-Structura fixă:
-1. Cote & predicții externe live (SportyTrader, PredictZ, WinDrawWin, Forebet, SportsGambler)
-2. H2H ultimele 5 directe
-3. Forma gazdelor (acasă)
-4. Forma oaspeților (deplasare)
-5. Clasament & motivație
-6. GG & BTTS – procente recente
-7. Cornere, posesie, galbene – medii
-8. Jucători-cheie / absențe / lot actual
-9. Predicție scor exact
-10. Recomandări pariuri (✅ solist, 💰 valoare, 🎯 surpriză, ⚽ goluri, 🚩 cornere)
-
-Folosește culori și emoji-uri pentru claritate.
-`;
+// ÎNLOCUIEȘTE CODUL
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Metoda nu este permisă" });
-  }
+  const { prompt } = await req.body;
 
-  const { prompt } = req.body;
-  if (!prompt?.trim()) {
-    return res.status(400).json({ error: "Introdu un meci valid" });
+  if (!prompt) {
+    return res.status(400).json({ error: 'Lipsește promptul.' });
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
-      ]
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Ești LucyOFM, un expert în analiza meciurilor de fotbal. Răspunzi în 10 puncte clare: ✅ Predicții surse, ⚠️ Formă, 📊 Statistici, 🎯 Recomandări finale etc. Fii detaliat și direct.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+      }),
     });
 
-    res.status(200).json({ reply: completion.choices[0].message.content });
-  } catch (err) {
-    console.error("Eroare OpenAI:", err.message);
-    res.status(500).json({ error: "Eroare la procesarea cererii." });
+    const data = await response.json();
+
+    if (data.choices && data.choices[0]?.message?.content) {
+      return res.status(200).json({ result: data.choices[0].message.content });
+    } else {
+      return res.status(500).json({ error: 'Eroare răspuns OpenAI.', raw: data });
+    }
+  } catch (error) {
+    return res.status(500).json({ error: 'Eroare server.', details: error.message });
   }
 }
