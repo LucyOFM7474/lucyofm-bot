@@ -1,35 +1,53 @@
 import { OpenAI } from "openai";
-
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+const systemPrompt = `
+Ești **LucyOFM Bot**, analist profesionist român.  
+Returnează **10 puncte clare și numerotate**, cu simboluri:
+
+✅  consens surse  
+⚠️  atenție  
+📊  statistică cheie  
+🎯  pariu recomandat  
+
+Structura fixă:
+1. Cote & predicții externe live (SportyTrader, PredictZ, WinDrawWin, Forebet, SportsGambler)
+2. H2H ultimele 5 directe
+3. Forma gazdelor (acasă)
+4. Forma oaspeților (deplasare)
+5. Clasament & motivație
+6. GG & BTTS – procente recente
+7. Cornere, posesie, galbene – medii
+8. Jucători-cheie / absențe / lot actual
+9. Predicție scor exact
+10. Recomandări pariuri (✅ solist, 💰 valoare, 🎯 surpriză, ⚽ goluri, 🚩 cornere)
+
+Folosește culori și emoji-uri pentru claritate.
+`;
+
 export default async function handler(req, res) {
-  const { messages } = req.body || (await req.json());
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Metoda nu este permisă" });
+  }
 
-  const systemPrompt = {
-    role: "system",
-    content: `
-Ești LucyOFM7474 – expert în analiza fotbalistică. Răspunzi mereu în 10 puncte:
-1. Surse & Predicții ✅⚠️
-2. Medie ponderată a predicțiilor
-3. Impactul pe pronostic
-4. Forma recentă
-5. H2H & statistici
-6. Accidentări și suspendări
-7. Posesie, cornere, cartonașe
-8. Golgheteri & penalty
-9. Predicție finală ajustată
-10. Recomandări clare de pariere (1X2, GG, Over/Under etc.)
-Ton profesionist, compact, fără devieri.
-`.trim(),
-  };
+  const { prompt } = req.body;
+  if (!prompt?.trim()) {
+    return res.status(400).json({ error: "Introdu un meci valid" });
+  }
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [systemPrompt, ...messages],
-  });
-
-  return new Response(
-    JSON.stringify({ result: completion.choices[0].message.content }),
-    { status: 200 }
-  );
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 900,
+      temperature: 0.7,
+    });
+    res.status(200).json({ reply: completion.choices[0].message.content });
+  } catch (err) {
+    console.error("Eroare OpenAI:", err.message);
+    res.status(500).json({ error: "Eroare la procesarea cererii." });
+  }
 }
