@@ -1,4 +1,4 @@
-import { OpenAI } from "openai";
+import OpenAI from "openai";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const systemPrompt = `
@@ -41,10 +41,9 @@ export default async function handler(req, res) {
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: prompt },
-      ],
-      max_tokens: 900,
-      temperature: 0.7,
+      ]
     });
+
     res.status(200).json({ reply: completion.choices[0].message.content });
   } catch (err) {
     console.error("Eroare OpenAI:", err.message);
