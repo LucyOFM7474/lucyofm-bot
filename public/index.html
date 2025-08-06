@@ -1,18 +1,19 @@
 <!DOCTYPE html>
 <html lang="ro">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LucyOFM Bot</title>
-  <link rel="stylesheet" href="/style.css" />
-</head>
-<body>
-  <div class="container">
-    <h1>LucyOFM Bot 🤖</h1>
-    <textarea id="user-input" placeholder="Scrie o întrebare..." rows="4"></textarea>
-    <button onclick="sendMessage()">Trimite</button>
-    <div id="response"></div>
-  </div>
-  <script src="/script.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LucyOFM BOT</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <h1>LucyOFM BOT</h1>
+    <div id="chat-container">
+      <div id="messages"></div>
+      <textarea id="user-input" placeholder="Scrie un mesaj..."></textarea>
+      <button onclick="sendMessage()">Trimite</button>
+    </div>
+    <script src="script.js"></script>
+  </body>
 </html>
