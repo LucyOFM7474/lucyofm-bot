@@ -1,19 +1,30 @@
 <!DOCTYPE html>
 <html lang="ro">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LucyOFM BOT</title>
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <h1>LucyOFM BOT</h1>
-    <div id="chat-container">
-      <div id="messages"></div>
-      <textarea id="user-input" placeholder="Scrie un mesaj..."></textarea>
-      <button onclick="sendMessage()">Trimite</button>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LucyOFM Bot – Analize meciuri</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0070f3" />
+</head>
+<body>
+  <div class="container">
+    <h1>🧠 LucyOFM Analize Meciuri</h1>
+    
+    <textarea id="prompt" placeholder="Scrie meciul aici (ex: Rapid - FCSB)..."></textarea>
+    
+    <button onclick="analizeaza()">🔍 Analizează Meci</button>
+    <button onclick="stergeIstoric()" style="background:#ff4444;color:#fff;border:none;padding:6px 12px;border-radius:4px;font-size:12px;margin-top:4px;">🗑️ Șterge istoric local</button>
+    <button onclick="incarcaIstoricCloud()">📡 Încarcă din cloud</button>
+
+    <pre id="rezultat">📝 Aici apar cele 10 puncte analizate...</pre>
+    
+    <div id="istoric" style="margin-top:20px;">
+      <h3>📚 Istoric Analize</h3>
+      <div id="istoric-list"></div>
     </div>
-    <script src="script.js"></script>
-  </body>
+  </div>
+  <script src="script.js"></script>
+</body>
 </html>
