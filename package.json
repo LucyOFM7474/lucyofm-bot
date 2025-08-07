@@ -1,11 +1,8 @@
 {
-  "name": "analiza-text-app",
+  "name": "lucyofm-bot",
   "version": "1.0.0",
-  "scripts": {
-    "dev": "vercel dev",
-    "build": "echo 'Build complete'"
-  },
+  "type": "module",
   "dependencies": {
-    "mongoose": "^7.5.0"
+    "mongoose": "^8.0.0"
   }
 }
