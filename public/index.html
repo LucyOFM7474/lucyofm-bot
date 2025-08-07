@@ -1,30 +1,35 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LucyOFM Bot – Analize meciuri</title>
-  <link rel="stylesheet" href="style.css" />
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#0070f3" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analizator Text Inteligent</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>🧠 LucyOFM Analize Meciuri</h1>
-    
-    <textarea id="prompt" placeholder="Scrie meciul aici (ex: Rapid - FCSB)..."></textarea>
-    
-    <button onclick="analizeaza()">🔍 Analizează Meci</button>
-    <button onclick="stergeIstoric()" style="background:#ff4444;color:#fff;border:none;padding:6px 12px;border-radius:4px;font-size:12px;margin-top:4px;">🗑️ Șterge istoric local</button>
-    <button onclick="incarcaIstoricCloud()">📡 Încarcă din cloud</button>
+    <div class="container">
+        <h1>🤖 Analizator Text Inteligent</h1>
+        <p>Introdu orice text și primești 10 analize detaliate instant!</p>
+        
+        <form id="chatForm">
+            <textarea 
+                id="prompt" 
+                placeholder="Scrie aici textul pe care vrei să-l analizez..."
+                rows="4"
+                required
+            ></textarea>
+            <button type="submit">📊 Analizează Text</button>
+        </form>
 
-    <pre id="rezultat">📝 Aici apar cele 10 puncte analizate...</pre>
-    
-    <div id="istoric" style="margin-top:20px;">
-      <h3>📚 Istoric Analize</h3>
-      <div id="istoric-list"></div>
+        <div id="output" class="output"></div>
+        
+        <div class="history-section">
+            <h2>📜 Istoric Analize</h2>
+            <button onclick="loadHistory()" style="margin-bottom: 20px;">Încarcă Istoric</button>
+            <div id="history"></div>
+        </div>
     </div>
-  </div>
-  <script src="script.js"></script>
+
+    <script src="script.js"></script>
 </body>
 </html>
