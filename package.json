@@ -1,0 +1,11 @@
+{
+  "name": "analiza-text-app",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'Build complete'"
+  },
+  "dependencies": {
+    "mongoose": "^7.5.0"
+  }
+}
