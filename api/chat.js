@@ -1,41 +1,53 @@
-import mongoose from "mongoose";
+import { OpenAI } from "openai";
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const conversationSchema = new mongoose.Schema({
-  prompt: { type: String, required: true },
-  response: { type: String, required: true },
-  timestamp: { type: Date, default: Date.now },
-});
+const systemPrompt = `
+Ești **LucyOFM Bot**, analist profesionist român.  
+Returnează **10 puncte clare și numerotate**, cu simboluri:
 
-const Conversation = mongoose.models.Conversation || mongoose.model("Conversation", conversationSchema);
+✅  consens surse  
+⚠️  atenție  
+📊  statistică cheie  
+🎯  pariu recomandat  
 
-const connectDB = async () => {
-  if (mongoose.connection.readyState === 1) return;
-  await mongoose.connect(process.env.MONGODB_URI);
-};
+Structura fixă:
+1. Cote & predicții externe live (SportyTrader, PredictZ, WinDrawWin, Forebet, SportsGambler)
+2. H2H ultimele 5 directe
+3. Forma gazdelor (acasă)
+4. Forma oaspeților (deplasare)
+5. Clasament & motivație
+6. GG & BTTS – procente recente
+7. Cornere, posesie, galbene – medii
+8. Jucători-cheie / absențe / lot actual
+9. Predicție scor exact
+10. Recomandări pariuri (✅ solist, 💰 valoare, 🎯 surpriză, ⚽ goluri, 🚩 cornere)
 
-const analyzeText = (text) => {
-  return `✅ Text primit: "${text}"\n\n🔢 Număr caractere: ${text.length}\n🕒 ${new Date().toLocaleString("ro-RO")}`;
-};
+Folosește culori și emoji-uri pentru claritate.
+`;
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Metoda nu este permisă" });
+  }
 
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Metodă neacceptată" });
+  const { prompt } = req.body;
+  if (!prompt?.trim()) {
+    return res.status(400).json({ error: "Introdu un meci valid" });
+  }
 
   try {
-    await connectDB();
-    const { prompt } = req.body;
-    if (!prompt || prompt.trim() === "")
-      return res.status(400).json({ error: "Prompt lipsă" });
-
-    const result = analyzeText(prompt);
-    await Conversation.create({ prompt, response: result });
-    res.status(200).json({ result });
-  } catch (error) {
-    console.error("Eroare server:", error);
-    res.status(500).json({ error: "Eroare internă server" });
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 900,
+      temperature: 0.7,
+    });
+    res.status(200).json({ reply: completion.choices[0].message.content });
+  } catch (err) {
+    console.error("Eroare OpenAI:", err.message);
+    res.status(500).json({ error: "Eroare la procesarea cererii." });
   }
 }
