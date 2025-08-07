@@ -2,15 +2,18 @@
 <html lang="ro">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LucyOFM Bot</title>
+  <title>LucyOFM Bot – Analize meciuri</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
 </head>
 <body>
-  <h1>LucyOFM Bot</h1>
-  <textarea id="prompt" placeholder="Scrie un text..."></textarea>
-  <button onclick="trimite()">Trimite</button>
-  <pre id="raspuns"></pre>
+  <div class="container">
+    <h1>LucyOFM 🧠 Analize meciuri</h1>
+    <textarea id="prompt" placeholder="Scrie meciul aici..."></textarea>
+    <button onclick="analizeaza()">Analizează</button>
+    <button onclick="stergeIstoric()" style="background:#ff4444;color:#fff;border:none;padding:6px 12px;border-radius:4px;font-size:12px;margin-top:4px;">🗑️ Șterge istoric</button>
+    <pre id="rezultat">📝 Aici apar cele 10 puncte...</pre>
+  </div>
   <script src="script.js"></script>
 </body>
 </html>
