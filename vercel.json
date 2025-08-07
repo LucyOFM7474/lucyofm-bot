@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "functions": {
+    "api/chat.js": {
+      "runtime": "nodejs18.x"
+    },
+    "api/history.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/$1"
+    }
+  ]
+}
