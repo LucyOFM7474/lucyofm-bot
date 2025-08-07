@@ -11,16 +11,16 @@ Returnează **10 puncte clare și numerotate**, cu simboluri:
 🎯  pariu recomandat  
 
 Structura fixă:
-1. Cote & predicții externe live (SportyTrader, PredictZ, WinDrawWin, Forebet, SportsGambler)
-2. H2H ultimele 5 directe
-3. Forma gazdelor (acasă)
-4. Forma oaspeților (deplasare)
-5. Clasament & motivație
-6. GG & BTTS – procente recente
-7. Cornere, posesie, galbene – medii
-8. Jucători-cheie / absențe / lot actual
-9. Predicție scor exact
-10. Recomandări pariuri (✅ solist, 💰 valoare, 🎯 surpriză, ⚽ goluri, 🚩 cornere)
+1. Cote & predicții externe live  
+2. H2H ultimele 5 directe  
+3. Forma gazdelor (acasă)  
+4. Forma oaspeților (deplasare)  
+5. Clasament & motivație  
+6. GG & BTTS – procente  
+7. Cornere, posesie, galbene – medii  
+8. Jucători-cheie / absențe  
+9. Predicție scor exact  
+10. Recomandări pariuri  
 
 Folosește culori și emoji-uri pentru claritate.
 `;
