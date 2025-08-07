@@ -1,33 +1,33 @@
-async function analizeaza() {
-  const prompt = document.getElementById("prompt").value.trim();
-  const rezultat = document.getElementById("rezultat");
-  if (!prompt) return (rezultat.textContent = "⚠️ Introdu un meci valid");
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.querySelector("form");
+  const input = document.getElementById("prompt");
+  const output = document.getElementById("output");
 
-  rezultat.textContent = "⏳ Se analizează...";
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const prompt = input.value.trim();
+    if (!prompt) return;
 
-  try {
-    const r = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
-    });
-    const d = await r.json();
+    output.innerText = "⏳ Se generează analiza...";
 
-    if (d.reply && d.reply.trim()) {
-      rezultat.textContent = d.reply;
-      salveazaIstoric(prompt, d.reply);
-
-      // Salvează și în MongoDB
-      await fetch("/api/save", {
+    try {
+      const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meci: prompt, rezultat: d.reply }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
       });
-    } else {
-      rezultat.textContent = "⚠️ Nu s-a generat nicio analiză.";
-    }
 
-  } catch (err) {
-    rezultat.textContent = "💥 Eroare rețea - verifică conexiunea";
-  }
-}
+      const data = await response.json();
+      if (response.ok) {
+        output.innerText = data.result || "⚠️ Nicio analiză generată.";
+      } else {
+        output.innerText = `❌ Eroare: ${data.error || "necunoscută"}`;
+      }
+    } catch (err) {
+      console.error("Eroare fetch:", err);
+      output.innerText = "❌ Eroare de rețea sau server.";
+    }
+  });
+});
