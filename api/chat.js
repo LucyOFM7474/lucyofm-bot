@@ -1,25 +1,15 @@
-// api/chat.js
-// Vercel Serverless Function – Analize meciuri (10 puncte) + salvare MongoDB + feedback
-// Cerințe ENV: OPENAI_API_KEY, MONGODB_URI (opțional), MONGO_DB=lucyofm (implicit), BOT_URL (opțional)
+// api/chat.js (CommonJS, fără ESM/top-level await) – stabil pe Vercel Node 18
+// ENV necesare: OPENAI_API_KEY; opțional MONGODB_URI, MONGO_DB (implicit "lucyofm"), BOT_URL
 
-import OpenAI from "openai";
-import { MongoClient } from "mongodb";
+const OpenAI = require("openai");
+const { MongoClient } = require("mongodb");
+const fs = require("fs");
+const path = require("path");
 
-// Dacă ai fișierul local de surse, îl folosim; dacă nu, continuăm fără el.
-let fetchSources = null;
-try {
-  const mod = await import("./fetchSources.js");
-  fetchSources = mod.default || mod.fetchSources || null;
-} catch (_) {
-  // Fără fetch extern – continuăm cu fallback.
-}
+// ---- OpenAI ----
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// ------- Mongo -------
-
+// ---- Mongo ----
 const MONGO_URI = process.env.MONGODB_URI || "";
 const MONGO_DB = process.env.MONGO_DB || "lucyofm";
 const COLLECTION_ANALYSES = "analyses";
@@ -34,49 +24,57 @@ async function getMongo() {
   return _mongoClient ? _mongoClient.db(MONGO_DB) : null;
 }
 
-// ------- Utils -------
+// ---- fetchSources (opțional) ----
+let fetchSources = null;
+(function resolveFetchSources() {
+  try {
+    const p = path.join(__dirname, "fetchSources.js");
+    if (fs.existsSync(p)) {
+      // Încearcă require clasic; dacă fișierul e ESM și dă eroare, ignorăm.
+      // Ideal: fetchSources.js tot CommonJS (module.exports = funcția).
+      const mod = require("./fetchSources.js");
+      fetchSources = mod.default || mod.fetchSources || mod || null;
+    }
+  } catch (_e) {
+    fetchSources = null;
+  }
+})();
 
+// ---- Utils ----
 function json(res, status, data) {
-  res.status(status).setHeader("Content-Type", "application/json");
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify(data));
 }
-
-function getNowISO() {
-  return new Date().toISOString();
-}
-
-function normalizeText(s) {
-  return (s || "").toString().trim();
-}
+const nowISO = () => new Date().toISOString();
+const norm = (s) => (s || "").toString().trim();
 
 function buildSystemPrompt() {
-  // Prompt sistem – stil Grok4 personalizat pentru Florin.
   return `
-Ești "LucyOFM – Analize Meciuri", un asistent care livrează analize în 10 puncte, în limba română, fără caractere asiatice.
-Ton: profesionist, direct, eficient, cu concluzii asumate (ca și cum ai paria tu).
-Respectă STRICT structura în 10 puncte de mai jos.
+Ești "LucyOFM – Analize Meciuri", asistent în română (fără caractere asiatice).
+Ton: profesionist, direct, eficient, cu concluzii asumate.
+Livrează STRICT 10 puncte:
 
-1) Surse & Predicții (inclusiv SportyTrader, PredictZ, Forebet, WinDrawWin etc.). Marchează: ✅ consens, ⚠️ opinii parțiale. Include link-urile, dacă au fost furnizate în contextul funcției de fetch.
-2) Medie ponderată a predicțiilor (explică pe scurt cum ai ponderat).
+1) Surse & Predicții (SportyTrader, PredictZ, Forebet, WinDrawWin etc.). ✅ consens, ⚠️ parțial. Include link-uri dacă există în context.
+2) Medie ponderată a predicțiilor (explică succint).
 3) Impactul pe pronostic (formă, absențe, motivație, program).
 4) Forma recentă (ultimele 5 meciuri, tendințe).
-5) Accidentări/Suspendări – doar absențe cu impact real.
-6) Golgheteri + penalty-uri (dacă lipsesc datele, spune explicit "Date indisponibile").
-7) Statistici avansate: posesie medie, cornere, cartonașe galbene, faulturi – separat acasă/deplasare dacă există date. Dacă nu, menționează clar lipsa.
-8) Predicție finală ajustată: scor estimat + 3–5 pariuri (1X2, under/over, BTTS, cornere etc.), clar și compact.
-9) Build-up bilet: 
-   – Solist sigur (cote ~1.40–1.60)
+5) Accidentări/Suspendări (doar absențe relevante).
+6) Golgheteri + penalty-uri (spune "Date indisponibile" dacă nu ai).
+7) Statistici: posesie, cornere, galbene, faulturi (acasă/deplasare) sau menționează lipsa.
+8) Predicție finală ajustată: scor + 3–5 pariuri (1X2, under/over, BTTS, cornere etc.), clar.
+9) Build-up bilet:
+   – Solist sigur (1.40–1.60)
    – Valoare ascunsă (1.70–2.00)
    – Surpriză controlată (2.10–2.40)
-   Fiecare cu motivație scurtă.
-10) Știri de ultimă oră / alertă indisponibilități / motivații speciale (dacă nu există, notează: "Nu sunt informații suplimentare verificate").
+   Cu motivație scurtă.
+10) Știri/alerte de ultimă oră (sau "Nu sunt informații suplimentare verificate").
 
 Reguli:
-- Fără "2" (victorie oaspeți) în recomandări dacă datele nu justifică (nu inventa).
-- Evită jucători plecați din loturi; dacă e incert, marchează ca incertitudine.
-- Când lipsesc date de la surse, menționează explicit "Date indisponibile".
-- Redă strict în română, fără emoji non-latine.
-- La final, oferă o concluzie scurtă: "De jucat:" cu 2–3 selecții prioritare.
+- Nu inventa date. Dacă lipsesc: "Date indisponibile".
+- Evită jucători ieșiți din lot; marchează incertitudinile.
+- Redă doar în română.
+- Încheie cu: "De jucat:" (2–3 selecții prioritare).
 `;
 }
 
@@ -97,13 +95,14 @@ function buildUserPrompt(payload, sourcesPack) {
   if (localeDate) lines.push(`Data (local): ${localeDate}`);
   if (extraNote) lines.push(`Observații: ${extraNote}`);
 
-  if (sourcesPack && sourcesPack.items && sourcesPack.items.length) {
+  if (sourcesPack && Array.isArray(sourcesPack.items) && sourcesPack.items.length) {
     lines.push(`\n[Surse externe colectate]`);
     sourcesPack.items.forEach((it, idx) => {
       const t = it.title ? ` – ${it.title}` : "";
       const pr = it.prediction ? ` | Predicție: ${it.prediction}` : "";
       const ct = it.confidence ? ` | Încredere: ${it.confidence}` : "";
-      lines.push(`${idx + 1}. ${it.source || "Sursă"}${t}${pr}${ct}${it.url ? ` | ${it.url}` : ""}`);
+      const url = it.url ? ` | ${it.url}` : "";
+      lines.push(`${idx + 1}. ${it.source || "Sursă"}${t}${pr}${ct}${url}`);
     });
   } else {
     lines.push(`\n[Surse externe colectate]: Date indisponibile sau fetch dezactivat.`);
@@ -112,78 +111,75 @@ function buildUserPrompt(payload, sourcesPack) {
   return lines.join("\n");
 }
 
-// ------- Core handler -------
-
-export default async function handler(req, res) {
-  // CORS simplu
+// ---- Handler ----
+module.exports = async function handler(req, res) {
+  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
   if (req.method === "OPTIONS") {
-    res.status(204).end();
+    res.statusCode = 204;
+    res.end();
     return;
   }
 
   if (req.method === "GET") {
     return json(res, 200, {
       ok: true,
-      service: "LucyOFM – api/chat",
-      time: getNowISO(),
+      service: "LucyOFM – api/chat (CJS)",
+      time: nowISO(),
       hasMongo: Boolean(MONGO_URI),
       hasOpenAI: Boolean(process.env.OPENAI_API_KEY),
       botUrl: process.env.BOT_URL || null,
     });
   }
 
-  // ------- FEEDBACK (PATCH) -------
+  // parse body safe (în unele runtime-uri body e string)
+  let body = req.body || {};
+  if (typeof body === "string") {
+    try { body = JSON.parse(body); } catch (_) { body = {}; }
+  }
+
+  // ---- Feedback
   if (req.method === "PATCH") {
     try {
-      const body = req.body || {};
       const { analysisId, vote, note } = body;
-
       if (!analysisId || !vote) {
         return json(res, 400, { ok: false, error: "analysisId și vote sunt obligatorii" });
       }
-
       const db = await getMongo();
-      if (!db) {
-        return json(res, 501, { ok: false, error: "MongoDB neconfigurat (MONGODB_URI lipsă)" });
-      }
+      if (!db) return json(res, 501, { ok: false, error: "MongoDB neconfigurat (MONGODB_URI lipsă)" });
 
-      const fb = {
+      await db.collection(COLLECTION_FEEDBACK).insertOne({
         analysisId,
         vote: vote === "up" ? "up" : "down",
-        note: normalizeText(note),
-        at: getNowISO(),
-      };
-
-      await db.collection(COLLECTION_FEEDBACK).insertOne(fb);
+        note: norm(note),
+        at: nowISO(),
+      });
       return json(res, 200, { ok: true, saved: true });
-    } catch (err) {
-      return json(res, 500, { ok: false, error: err?.message || "Eroare feedback" });
+    } catch (e) {
+      return json(res, 500, { ok: false, error: e?.message || "Eroare feedback" });
     }
   }
 
-  // ------- GENERARE ANALIZĂ (POST) -------
+  // ---- Generare analiză
   if (req.method === "POST") {
     try {
-      const body = req.body || {};
       const {
         homeTeam,
         awayTeam,
         league,
-        date,        // ISO (opțional)
-        localeDate,  // ex: "08.08.2025" (opțional)
-        extraNote,   // notițe utilizator
-        model,       // opțional (default: gpt-4o-mini)
+        date,
+        localeDate,
+        extraNote,
+        model,
       } = body;
 
       if (!homeTeam || !awayTeam) {
         return json(res, 400, { ok: false, error: "homeTeam și awayTeam sunt obligatorii" });
       }
 
-      // 1) Colectare surse (dacă există modulul)
+      // 1) Surse (dacă avem fetchSources)
       let sourcesPack = { items: [] };
       if (typeof fetchSources === "function") {
         try {
@@ -193,15 +189,15 @@ export default async function handler(req, res) {
         }
       }
 
-      // 2) Pregătire prompturi
+      // 2) Prompturi
       const systemPrompt = buildSystemPrompt();
-      const userPrompt = buildUserPrompt(
-        { homeTeam, awayTeam, league, date, localeDate, extraNote },
-        sourcesPack
-      );
+      const userPrompt = buildUserPrompt({ homeTeam, awayTeam, league, date, localeDate, extraNote }, sourcesPack);
 
-      // 3) Apel OpenAI
-      const useModel = model || "gpt-4o-mini"; // stabil, rapid; poți schimba la "gpt-4o" dacă vrei
+      // 3) OpenAI
+      if (!process.env.OPENAI_API_KEY) {
+        return json(res, 500, { ok: false, error: "OPENAI_API_KEY lipsește la Environment Variables." });
+      }
+      const useModel = model || "gpt-4o-mini";
       const completion = await openai.chat.completions.create({
         model: useModel,
         temperature: 0.2,
@@ -212,48 +208,46 @@ export default async function handler(req, res) {
         ],
       });
 
-      const text = completion?.choices?.[0]?.message?.content?.trim() || "Nu s-a generat conținut.";
-      const meta = {
-        model: useModel,
-        created: completion?.created || Math.floor(Date.now() / 1000),
-        id: completion?.id || null,
-      };
+      const text = (completion && completion.choices && completion.choices[0] && completion.choices[0].message && completion.choices[0].message.content || "").trim();
 
-      // 4) Salvare Mongo (dacă e configurat)
+      // 4) Salvare în Mongo (dacă e configurat)
       let saved = null;
       const db = await getMongo();
       if (db) {
-        const doc = {
+        const ins = await db.collection(COLLECTION_ANALYSES).insertOne({
           type: "analysis",
-          homeTeam: normalizeText(homeTeam),
-          awayTeam: normalizeText(awayTeam),
-          league: normalizeText(league),
-          date: normalizeText(date),
-          localeDate: normalizeText(localeDate),
-          extraNote: normalizeText(extraNote),
+          homeTeam: norm(homeTeam),
+          awayTeam: norm(awayTeam),
+          league: norm(league),
+          date: norm(date),
+          localeDate: norm(localeDate),
+          extraNote: norm(extraNote),
           sourcesPack,
-          output: text,
-          meta,
-          createdAt: getNowISO(),
-        };
-        const ins = await db.collection(COLLECTION_ANALYSES).insertOne(doc);
+          output: text || "Nu s-a generat conținut.",
+          meta: {
+            model: useModel,
+            created: completion?.created || Math.floor(Date.now() / 1000),
+            id: completion?.id || null,
+          },
+          createdAt: nowISO(),
+        });
         saved = { analysisId: ins.insertedId.toString() };
       }
 
       return json(res, 200, {
         ok: true,
-        analysis: text,
+        analysis: text || "Nu s-a generat conținut.",
         sources: sourcesPack,
-        meta,
-        saved: saved || null,
+        meta: {
+          model: useModel,
+          id: completion?.id || null,
+        },
+        saved,
       });
-    } catch (err) {
-      return json(res, 500, { ok: false, error: err?.message || "Eroare generare analiză" });
+    } catch (e) {
+      return json(res, 500, { ok: false, error: e?.message || "Eroare generare analiză" });
     }
   }
 
   return json(res, 405, { ok: false, error: "Method Not Allowed" });
-}
-
-// ------- Vercel config (opțional) -------
-// export const config = { runtime: "nodejs18.x" };
+};
