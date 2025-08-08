@@ -1,69 +1,59 @@
-// public/script.js (fără dată)
-const $ = (sel) => document.querySelector(sel);
-const statusEl = $("#status");
-const outEl = $("#analysis");
-const fbBox = $("#feedbackBox");
-const matchEl = $("#match");
-const analyzeBtn = $("#analyzeBtn");
+// public/script.js – complet, cu fix pentru HTTP 400
 
-function setStatus(msg) { statusEl.textContent = msg || ""; }
-function setOutput(text) { outEl.textContent = text || ""; }
+async function generateAnalysis() {
+  const btn = document.getElementById('genBtn');
+  const out = document.getElementById('output');
+  const raw = document.getElementById('matchInput').value || "";
 
-async function callChat(match) {
-  const resp = await fetch("/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ match })
-  });
-  if (!resp.ok) {
-    let err;
-    try { err = await resp.json(); } catch {}
-    throw new Error(err?.details || `HTTP ${resp.status}`);
-  }
-  return resp.json();
-}
-
-analyzeBtn?.addEventListener("click", async () => {
-  const match = (matchEl.value || "").trim();
-  if (!match) {
-    setStatus("Introdu un meci în formatul „Gazde - Oaspeți”.");
+  // Acceptă "-" sau "–", cu sau fără spații
+  const parts = raw.split(/[-–]/).map(s => s.trim()).filter(Boolean);
+  if (parts.length !== 2) {
+    out.value = "Format invalid. Scrie exact: Gazdă - Oaspete (ex: FC Copenhaga - Aarhus).";
     return;
   }
-  setStatus("Se colectează sursele… apoi întreabă GPT-5…");
-  setOutput("");
-  fbBox.hidden = true;
-  analyzeBtn.disabled = true;
+  const [homeTeam, awayTeam] = parts;
 
-  try {
-    const data = await callChat(match);
-    setStatus(`Model: ${data.model} • ${data.match}`);
-    setOutput(data.analysis || "(fără text)");
-    fbBox.dataset.match = data.match;
-    fbBox.hidden = false;
-  } catch (e) {
-    console.error(e);
-    setStatus("Eroare: " + e.message);
-    setOutput("");
-  } finally {
-    analyzeBtn.disabled = false;
-  }
-});
-
-fbBox?.addEventListener("click", async (ev) => {
-  const btn = ev.target.closest("button");
-  if (!btn) return;
-  const feedback = btn.getAttribute("data-fb");
-  const match = fbBox.dataset.match;
-  if (!match) return;
+  btn.disabled = true;
+  out.value = "Se generează analiza...";
 
   try {
     const resp = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "feedback", match, feedback })
+      body: JSON.stringify({
+        homeTeam,
+        awayTeam,
+        league: "",
+        date: "",
+        localeDate: "",
+        extraNote: "",
+        model: "gpt-4o-mini"
+      })
     });
-    if (resp.ok) setStatus(`Feedback salvat: ${feedback}`);
-  } catch {
-    setStatus("Nu am putut salva feedback-ul.");
+
+    const data = await resp.json();
+    if (!resp.ok) {
+      out.value = `Eroare API (${resp.status}): ${data.error || "necunoscută"}`;
+      return;
+    }
+
+    out.value = data.analysis || "Nu s-a generat conținut.";
+  } catch (e) {
+    out.value = "Eroare de rețea: " + (e?.message || e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Pornirea generării la apăsarea Enter în câmpul de meci
+document.addEventListener("DOMContentLoaded", () => {
+  const input = document.getElementById('matchInput');
+  if (input) {
+    input.addEventListener('keypress', (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        generateAnalysis();
+      }
+    });
   }
 });
