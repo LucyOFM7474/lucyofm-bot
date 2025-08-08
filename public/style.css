@@ -1,13 +1,13 @@
-/* public/style.css — layout fix pentru „Rezultat” și butoane */
+/* public/style.css — fix layout pentru Rezultat + stil minim coerent */
 
 :root{
-  --bg:#0f172a;
+  --bg:#0b1220;
   --panel:#111827;
   --text:#e5e7eb;
-  --muted:#9ca3af;
+  --muted:#94a3b8;
   --accent:#3b82f6;
-  --success:#22c55e;
-  --warn:#f59e0b;
+  --accent-2:#334155;
+  --error:#ff8a80;
 }
 
 html,body{
@@ -15,12 +15,12 @@ html,body{
   padding:0;
   background:var(--bg);
   color:var(--text);
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue","Noto Sans",Arial,"Apple Color Emoji","Segoe UI Emoji";
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue","Noto Sans",Arial;
 }
 
 .container{
-  max-width:1100px;      /* ✅ lățime suficientă */
-  margin:32px auto;
+  max-width:1100px;               /* ✅ lățime mare */
+  margin:24px auto;
   padding:0 16px;
 }
 
@@ -37,21 +37,19 @@ html,body{
   margin-bottom:10px;
 }
 
-.sub{
-  color:var(--muted);
-  margin-bottom:16px;
-}
+.sub{ color:var(--muted); margin-bottom:16px; }
 
 .input-row{
   display:flex;
   gap:10px;
   align-items:center;
+  margin:8px 0 16px;
 }
 
-input[type="text"], .input{
+.input, input[type="text"]{
   flex:1;
-  min-width:300px;
-  background:#0b1220;
+  min-width:360px;
+  background:#0a1020;
   border:1px solid #1f2937;
   color:var(--text);
   padding:12px 14px;
@@ -71,12 +69,11 @@ input[type="text"], .input{
   color:white;
   font-weight:600;
 }
-
 .btn[disabled]{ opacity:.6; cursor:not-allowed; }
-.btn-secondary{ background:#334155; color:#e2e8f0; }
+.btn-secondary{ background:var(--accent-2); color:#e2e8f0; }
 
 .section-title{
-  margin:20px 0 10px;
+  margin:18px 0 10px;
   font-weight:700;
 }
 
@@ -84,19 +81,18 @@ input[type="text"], .input{
   display:flex;
   gap:8px;
   flex-wrap:wrap;
-  margin-bottom:8px;
+  margin:0 0 8px 0;
 }
 
 #result, #resultBox, .result{
-  background:#0b1220;
+  background:#0a1020;
   border:1px solid #1f2937;
   border-radius:16px;
   padding:16px;
-  min-height:140px;
-  /* ✅ ocupă toată lățimea containerului */
-  width:100%;
+  min-height:200px;               /* ✅ vizibil */
+  width:100%;                     /* ✅ lățime completă */
   box-sizing:border-box;
-  overflow:auto;
+  overflow:auto;                  /* ✅ scroll dacă textul e lung */
 }
 
 .result-pre{
@@ -104,8 +100,9 @@ input[type="text"], .input{
   white-space:pre-wrap;
   word-wrap:break-word;
   line-height:1.45;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+  font-size:14px;
 }
 
-/* Pictograme textuale (dacă vrei să apară clar în text) */
-.ok{ color:var(--success); font-weight:700; }
-.warn{ color:var(--warn); font-weight:700; }
+.info{ opacity:.9; }
+.error{ color:var(--error); }
