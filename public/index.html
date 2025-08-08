@@ -4,35 +4,50 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LucyOFM – Analize Meciuri</title>
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/public/style.css" />
 </head>
 <body>
-  <div class="container">
-    <div class="header">LucyOFM – Analize Meciuri</div>
-    <div class="sub">GPT-5 • Surse externe • Feedback Mongo</div>
+  <header class="app-header">
+    <h1>LucyOFM – Analize Meciuri</h1>
+    <div class="header-actions">
+      <button id="openSettings" class="btn secondary">Setări</button>
+    </div>
+  </header>
 
-    <div class="panel">
-      <div class="section-title">Meci (format: Gazdă – Oaspeți)</div>
-      <div class="input-row">
-        <input id="matchInput" type="text" placeholder="Ex: Korona Kielce – Radomiak" />
-        <button id="generateBtn" class="btn">Generează analiza</button>
+  <main class="container">
+    <section class="card">
+      <label for="matchInput" class="lbl">Meci (format „Gazdă - Oaspeți” sau slug/link)</label>
+      <div class="row">
+        <input id="matchInput" type="text" placeholder="Ex.: Club Brugge - Cercle Brugge" />
+        <button id="generateBtn" class="btn primary">Generează analiza</button>
       </div>
 
-      <div id="sourcesBar" class="sources"></div>
+      <div id="sourceButtons" class="row gap"></div>
+      <div id="sourceSummary"></div>
+    </section>
 
-      <div class="section-title">Structură în 10 puncte + „De jucat”.</div>
+    <section class="card">
+      <h2>Structură în 10 puncte • „De jucat”.</h2>
+      <div id="result" class="analysis"></div>
+      <div id="feedbackWrap" class="mt"></div>
+    </section>
+  </main>
 
-      <div class="section-title" style="margin-top:18px;">Rezultat</div>
-      <div id="resultBox"><div class="placeholder">Introduceți meciul și apăsați „Generează analiza”.</div></div>
-
-      <div class="feedback-row">
-        <button id="fbGood" class="btn btn-secondary">👍 Bun</button>
-        <button id="fbBad" class="btn btn-secondary">👎 Slab</button>
-        <span id="status" class="status"></span>
+  <!-- Modal Setări -->
+  <div id="settingsModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-content">
+      <div class="modal-head">
+        <h3>Setări</h3>
+        <button id="closeSettings" class="btn icon">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted">Afișează un exemplu de analiză în formatul standard (fundal negru, text alb, simboluri colorate):</p>
+        <button id="demoBtn" class="btn demo">Afișează analiza demo (Brugge – Cercle)</button>
+        <p class="muted small mt">Notă: Acesta este doar un exemplu vizual. Pentru analize reale folosește butonul „Generează analiza”.</p>
       </div>
     </div>
   </div>
 
-  <script src="/script.js"></script>
+  <script src="/public/script.js"></script>
 </body>
 </html>
