@@ -1,108 +1,62 @@
-/* public/style.css — fix layout pentru Rezultat + stil minim coerent */
-
 :root{
-  --bg:#0b1220;
-  --panel:#111827;
-  --text:#e5e7eb;
-  --muted:#94a3b8;
-  --accent:#3b82f6;
-  --accent-2:#334155;
-  --error:#ff8a80;
+  --bg:#0f172a;        /* albastru închis */
+  --panel:#111827;     /* panou */
+  --text:#e5e7eb;      /* text deschis */
+  --muted:#9ca3af;     /* text secundar */
+  --accent:#3b82f6;    /* albastru buton */
+  --success:#22c55e;   /* verde */
+  --warn:#f59e0b;      /* galben */
+  --border:#1f2937;
 }
 
+*{ box-sizing:border-box; }
 html,body{
-  margin:0;
-  padding:0;
-  background:var(--bg);
-  color:var(--text);
+  margin:0; padding:0; background:var(--bg); color:var(--text);
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue","Noto Sans",Arial;
 }
 
 .container{
-  max-width:1100px;               /* ✅ lățime mare */
-  margin:24px auto;
-  padding:0 16px;
+  max-width:1100px; margin:32px auto; padding:0 16px;
 }
 
-.panel{
-  background:var(--panel);
-  border-radius:16px;
-  padding:16px;
-  box-shadow:0 6px 18px rgba(0,0,0,.35);
-}
-
-.header{
-  font-size:28px;
-  font-weight:700;
-  margin-bottom:10px;
-}
-
+.header{ font-size:28px; font-weight:700; margin-bottom:6px; }
 .sub{ color:var(--muted); margin-bottom:16px; }
 
-.input-row{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  margin:8px 0 16px;
+.panel{
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:16px; padding:16px; box-shadow:0 6px 18px rgba(0,0,0,.35);
 }
 
-.input, input[type="text"]{
-  flex:1;
-  min-width:360px;
-  background:#0a1020;
-  border:1px solid #1f2937;
-  color:var(--text);
-  padding:12px 14px;
-  border-radius:12px;
-  outline:none;
+.section-title{ font-weight:700; margin:16px 0 8px; }
+
+.input-row{ display:flex; gap:10px; align-items:center; }
+
+input[type="text"]{
+  flex:1; min-width:300px; background:#0b1220; color:var(--text);
+  border:1px solid var(--border); padding:12px 14px; border-radius:12px; outline:none;
 }
 
 .btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  padding:12px 14px;
-  border-radius:12px;
-  border:1px solid transparent;
-  cursor:pointer;
-  background:var(--accent);
-  color:white;
-  font-weight:600;
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:12px 14px; border-radius:12px; border:1px solid transparent;
+  cursor:pointer; background:var(--accent); color:white; font-weight:600;
 }
 .btn[disabled]{ opacity:.6; cursor:not-allowed; }
-.btn-secondary{ background:var(--accent-2); color:#e2e8f0; }
+.btn-secondary{ background:#334155; color:#e2e8f0; }
 
-.section-title{
-  margin:18px 0 10px;
-  font-weight:700;
-}
+#sourcesBar{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
 
-#sourcesBar{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  margin:0 0 8px 0;
+#resultBox{
+  background:#0b1220; border:1px solid var(--border); border-radius:16px;
+  min-height:220px; width:100%; padding:16px; overflow:auto;
 }
-
-#result, #resultBox, .result{
-  background:#0a1020;
-  border:1px solid #1f2937;
-  border-radius:16px;
-  padding:16px;
-  min-height:200px;               /* ✅ vizibil */
-  width:100%;                     /* ✅ lățime completă */
-  box-sizing:border-box;
-  overflow:auto;                  /* ✅ scroll dacă textul e lung */
-}
+.placeholder{ color:var(--muted); }
 
 .result-pre{
-  margin:0;
-  white-space:pre-wrap;
-  word-wrap:break-word;
-  line-height:1.45;
-  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
-  font-size:14px;
+  margin:0; white-space:pre-wrap; word-wrap:break-word; line-height:1.5;
 }
 
-.info{ opacity:.9; }
-.error{ color:var(--error); }
+.feedback-row{ display:flex; align-items:center; gap:8px; margin-top:10px; }
+.status{ color:var(--muted); }
+.ok{ color:var(--success); font-weight:700; }
+.warn{ color:var(--warn); font-weight:700; }
