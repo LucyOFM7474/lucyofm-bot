@@ -1,128 +1,137 @@
 // api/chat.js
-// Generează analiza în 10 puncte pe baza consensului între surse externe.
-// Presupune OPENAI_API_KEY setat în Vercel, dar textul final e compus local.
-// Dacă vrei, poți înlocui secțiunea LLM cu apel real la OpenAI.
+// GET = health-check; POST = generare analiză în 10 puncte (cu fallback local dacă lipsește cheia).
 
-export const config = { runtime: "edge" };
-
-function scoreConsensus(values) {
-  // primește un array ex: ["1X","1X","X2", null]
-  const counts = {};
-  for (const v of values.filter(Boolean)) counts[v] = (counts[v] || 0) + 1;
-  let best = null,
-    bestN = 0;
-  for (const k in counts) if (counts[k] > bestN) (best = k), (bestN = counts[k]);
-  const total = values.filter(Boolean).length;
-
-  // clasificare:
-  // 3/3 sau 3/4 => ✅, 2/3 ori 2/4 => ⚠️, altfel ❌ (sau "—" dacă nu există date)
-  let mark = "—";
-  if (bestN === 0) mark = "—";
-  else if (bestN >= 3) mark = "✅";
-  else if (bestN === 2) mark = "⚠️";
-  else mark = "❌";
-
-  return { pick: best, mark, votes: bestN, total, counts };
-}
-
-function buildLine(label, res) {
-  if (res.total === 0) return `${label}: date insuficiente.`;
-  const details = Object.entries(res.counts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => `${k}×${v}`)
-    .join(", ");
-  return `${res.mark} ${label}: ${res.pick || "—"} (${details})`;
-}
+export const config = { runtime: "nodejs18.x" };
 
 function sanitize(s) {
-  return String(s || "").replace(/\s+/g, " ").trim();
+  return String(s || "").trim().replace(/\s+/g, " ");
 }
 
-function slugify(s) {
-  return String(s)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+function buildPrompt({ home, away, sources = {} }) {
+  const match = `${home} – ${away}`;
+  const s = {
+    sporty: sources?.sportytrader || sources?.sporty || null,
+    forebet: sources?.forebet || null,
+    predictz: sources?.predictz || null,
+  };
+
+  return `
+Ești un analist profesionist de pariuri. Dă analiza în 10 puncte (structura fixă de mai jos), concis, clar, cu bullet-uri și formulări „de jucat”.
+Folosește simboluri: ✅ (consens/puternic), ⚠️ (incert), 📊 (statistici), 🎯 (recomandare). Nu inventa surse; dacă lipsesc, marchează „indisponibil”.
+
+Meci: ${match}
+
+Surse (deschide doar dacă există):
+- SportyTrader: ${s.sporty || "indisponibil"}
+- Forebet: ${s.forebet || "indisponibil"}
+- PredictZ: ${s.predictz || "indisponibil"}
+
+STRUCTURA (exact 10 puncte):
+1) Surse & Predicții (✅/⚠️, enumeră pe scurt ce spune fiecare sursă)
+2) Medie ponderată a predicțiilor (explică pe scurt)
+3) Consens 1X2 (BTTS dacă există)
+4) Consens Over/Under (linii principale)
+5) Impact formă & absențe (pe scurt, fără invenții)
+6) Golgheteri & penalty-uri (dacă nu ai surse, marchează ca „necesită surse dedicate”)
+7) Statistici: posesie, cornere, galbene, faulturi (📊, dacă lipsesc, notează „în lucru”)
+8) Tendințe din ultimele 5 meciuri (fără invenții)
+9) Recomandări „de jucat” (3–5 opțiuni, în ordinea încrederii)
+10) Note & verificări (atenționări utile)
+
+Formatare: liste cu „- ”, simboluri, text scurt.
+  `.trim();
 }
 
-export default async function handler(req) {
+function localFallback({ home, away, sources = {} }) {
+  const mk = (x) => (x ? x : "indisponibil");
+  return [
+    `1) Surse & Predicții`,
+    `- SportyTrader: ${mk(sources?.sportytrader)}`,
+    `- Forebet: ${mk(sources?.forebet)}`,
+    `- PredictZ: ${mk(sources?.predictz)}`,
+    ``,
+    `2) Medie ponderată a predicțiilor`,
+    `- ⚠️ Date insuficiente pentru o medie robustă.`,
+    ``,
+    `3) Consens 1X2 / BTTS`,
+    `- ⚠️ Fără consens ferm (lipsă date).`,
+    ``,
+    `4) Consens Over/Under`,
+    `- ⚠️ Lipsă cote/estimări confirmate.`,
+    ``,
+    `5) Impact formă & absențe`,
+    `- ⚠️ Necesar feed de echipe & absențe.`,
+    ``,
+    `6) Golgheteri & penalty-uri`,
+    `- 📌 Necesită surse dedicate marcatorilor.`,
+    ``,
+    `7) 📊 Statistici: posesie, cornere, galbene, faulturi`,
+    `- În lucru – se vor popula când sursele devin stabile.`,
+    ``,
+    `8) Tendințe ultimele 5 meciuri`,
+    `- În lucru – necesită agregare istoric.`,
+    ``,
+    `9) 🎯 Recomandări „de jucat” (în ordinea încrederii)`,
+    `- ⚠️ Nicio recomandare fermă fără consens minim.`,
+    ``,
+    `10) Note & verificări`,
+    `- Dacă o sursă este blocată temporar, analiza degradează elegant (fără a „inventa”).`,
+  ].join("\n");
+}
+
+export default async function handler(req, res) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const home = sanitize(body.home);
-    const away = sanitize(body.away);
-
-    if (!home || !away) {
-      return new Response(JSON.stringify({ error: "Completează echipele." }), {
-        status: 400,
-        headers: { "content-type": "application/json" },
+    // ✅ Health-check (poți testa direct în browser)
+    if (req.method === "GET") {
+      return res.status(200).json({
+        ok: true,
+        service: "LucyOFM – api/chat",
+        method: "GET",
+        hint: "Trimite POST cu {home, away, sources?} pentru analiza în 10 puncte."
       });
     }
 
-    // 1) Colectează surse externe
-    const urlFetch = new URL(req.url);
-    urlFetch.pathname = "/api/fetchSources";
-    urlFetch.search = `?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}`;
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-    const sRes = await fetch(urlFetch.toString(), { headers: { "x-internal": "1" } });
-    const sJson = await sRes.json().catch(() => null);
+    const { home = "", away = "", sources = {} } = req.body || {};
+    const H = sanitize(home), A = sanitize(away);
+    if (!H || !A) return res.status(400).json({ error: "Parametrii 'home' și 'away' sunt necesari." });
 
-    const sources = sJson?.sources || {};
-    const st = sources.sportytrader?.picks || {};
-    const fb = sources.forebet?.picks || {};
-    const pz = sources.predictz?.picks || {};
+    const prompt = buildPrompt({ home: H, away: A, sources });
 
-    // 2) Consens pe piețe
-    const cons_1x2 = scoreConsensus([st["1X2"], fb["1X2"], pz["1X2"]]);
-    const cons_btts = scoreConsensus([st.BTTS, fb.BTTS, pz.BTTS]);
-    const cons_ou25 = scoreConsensus([st.OU25, fb.OU25, pz.OU25]);
+    const apiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_BOT || "";
+    if (!apiKey) {
+      return res.status(200).json({ content: localFallback({ home: H, away: A, sources }) });
+    }
 
-    // 3) Statistici auxiliare (cornere/galbene) – doar dacă există mențiuni
-    const corners = [st.corners, fb.corners, pz.corners].filter(Boolean)[0] || "Nespecificate clar";
-    const cards = [st.cards, fb.cards, pz.cards].filter(Boolean)[0] || "Nespecificate clar";
-
-    const lines = [];
-    lines.push(`1) Surse & Predicții`);
-    const srcList = Object.entries(sources)
-      .map(([k, v]) => `- ${k}: ${v.ok ? "ok" : "indisponibil"} (${v.url})`)
-      .join("\n");
-    lines.push(srcList || "- Nicio sursă disponibilă în acest moment.");
-
-    lines.push(`\n2) Consens 1X2\n${buildLine("1X2", cons_1x2)}`);
-    lines.push(`\n3) Consens BTTS (GG)\n${buildLine("BTTS", cons_btts)}`);
-    lines.push(`\n4) Consens Over/Under 2.5\n${buildLine("Over/Under 2.5", cons_ou25)}`);
-
-    lines.push(`\n5) Impact forma & absențe\n- (în lucru: această secțiune se va alimenta din surse de lot când sunt disponibile).`);
-
-    lines.push(`\n6) Golgheteri & penaltiuri\n- (în lucru / necesită surse dedicate marcatorilor).`);
-
-    lines.push(`\n7) Statistici: posesie, cornere, galbene, faulturi\n- Cornere: ${corners}\n- Cartonașe galbene: ${cards}\n- (posesie/faulturi: vor fi populate când sursele devin stabile).`);
-
-    lines.push(`\n8) Tendințe din ultimele 5 meciuri\n- (placeholder — se va popula din surse istorice).`);
-
-    // 9) Predicție finală ajustată (bazată pe consensul cel mai puternic)
-    let recomandari = [];
-    if (cons_1x2.mark === "✅" || cons_1x2.mark === "⚠️") recomandari.push(`1X2: ${cons_1x2.pick}`);
-    if (cons_btts.mark === "✅" || cons_btts.mark === "⚠️") recomandari.push(`BTTS: ${cons_btts.pick}`);
-    if (cons_ou25.mark === "✅" || cons_ou25.mark === "⚠️") recomandari.push(`Goluri: ${cons_ou25.pick}`);
-
-    lines.push(
-      `\n9) Recomandări „de jucat” (în ordinea încrederii)\n` +
-        (recomandari.length ? "- " + recomandari.join("\n- ") : "- Nicio recomandare fără consens minim.")
-    );
-
-    lines.push(`\n10) Note & verificări\n- Dacă o sursă este blocată temporar, analiza degradează elegant (fără a cădea).\n- Verifică linkurile surselor pentru detalii complete.`);
-
-    const text = lines.join("\n");
-
-    return new Response(JSON.stringify({ text }), {
-      headers: { "content-type": "application/json" },
+    // REST call la OpenAI (chat.completions)
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: "Ești un analist de pariuri. Răspunde concis, cu liste clare." },
+          { role: "user", content: prompt }
+        ]
+      })
     });
+
+    const data = await r.json().catch(() => null);
+    if (!r.ok) {
+      return res.status(r.status).json({
+        warning: data?.error?.message || "OpenAI indisponibil",
+        content: localFallback({ home: H, away: A, sources })
+      });
+    }
+
+    const content = data?.choices?.[0]?.message?.content || localFallback({ home: H, away: A, sources });
+    return res.status(200).json({ content });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err?.message || "Eroare" }), {
-      status: 500,
-      headers: { "content-type": "application/json" },
-    });
+    return res.status(500).json({ error: err?.message || "Eroare internă" });
   }
 }
