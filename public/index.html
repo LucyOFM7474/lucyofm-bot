@@ -1,1 +1,49 @@
-<!-- TODO: codul HTML pentru interfața botului aici -->
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LucyOFM – Analize Meciuri (GPT-5)</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="top">
+    <h1>LucyOFM – Analize Meciuri</h1>
+    <div class="badge">GPT-5 · MongoDB</div>
+  </header>
+
+  <main class="wrap">
+    <section class="card">
+      <label for="match">Meci (format „Gazde - Oaspeți”)</label>
+      <input id="match" type="text" placeholder="FC Copenhaga - Aarhus" />
+
+      <div class="row">
+        <div class="col">
+          <label for="date">Dată (opțional)</label>
+          <input id="date" type="date" />
+        </div>
+        <div class="col">
+          <button id="analyzeBtn">Generează analiza</button>
+        </div>
+      </div>
+
+      <small class="hint">Sursa externă: SportyTrader + fallback. Structură în 10 puncte, cu ✅ ⚠️ 📊 🎯</small>
+    </section>
+
+    <section class="card">
+      <div id="status" class="status"></div>
+      <pre id="analysis" class="output"></pre>
+
+      <div id="feedbackBox" class="feedback" hidden>
+        <button data-fb="👍">👍 Bun</button>
+        <button data-fb="👎">👎 Slab</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">© LucyOFM • build v1</footer>
+
+  <script src="/script.js"></script>
+</body>
+</html>
