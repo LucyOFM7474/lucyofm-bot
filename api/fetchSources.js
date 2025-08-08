@@ -1,48 +1,41 @@
-// api/fetchSources.js — CommonJS
-// Încearcă SportyTrader (RO). Dacă nu găsește, întoarce items:[] fără a arunca eroare.
+// api/fetchSources.js
 
-const cheerio = require("cheerio");
-
-// normalizează text pentru slug (fără diacritice)
-function slugify(s) {
-  return (s || "")
-    .toString()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // fără diacritice
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-async function trySportyTrader(homeTeam, awayTeam) {
-  const formatted = slugify(`${homeTeam}-${awayTeam}`);
-  const url = `https://www.sportytrader.com/ro/pronosticuri/${formatted}/`;
-
+export default async function handler(req, res) {
   try {
-    const r = await fetch(url, { method: "GET", redirect: "follow" });
-    if (!r.ok) return null; // 404/other: renunțăm politicos
+    const { home = "", away = "" } = req.query;
 
-    const html = await r.text();
-    const $ = cheerio.load(html);
+    // Funcție pentru a crea slug-uri corecte pentru SportyTrader
+    const slugify = (s) =>
+      String(s)
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // elimină diacritice
+        .replace(/[^a-z0-9]+/g, "-") // înlocuiește caracterele non-alfanumerice cu "-"
+        .replace(/^-+|-+$/g, ""); // elimină "-" la început și sfârșit
 
-    // Căutăm un heading/predictie; fallback: titlul paginii
-    const title = ($("h1").first().text() || $("title").first().text() || "").trim();
-    // Nu riscăm "predicția" — site-ul se schimbă des; lăsăm doar titlul + url
-    return {
-      source: "SportyTrader",
-      title: title || "Pagină pronostic",
+    // Combină echipele într-un singur slug
+    const formatted = [slugify(home), slugify(away)].filter(Boolean).join("-");
+
+    if (!formatted) {
+      return res.status(400).json({
+        error: "Parametrii 'home' și 'away' sunt necesari.",
+      });
+    }
+
+    // ✅ Link corect către pagina SportyTrader
+    const url = `https://www.sportytrader.com/ro/pronosticuri/${formatted}/`;
+
+    // Returnează linkul fără să facă scraping (pentru a-l folosi direct în front-end)
+    return res.status(200).json({
+      ok: true,
       url,
-      prediction: null,
-      confidence: null
-    };
-  } catch {
-    return null; // niciodată nu aruncăm – doar null
+      formatted,
+      source: "sportytrader",
+    });
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      error: err?.message || "Eroare internă server",
+    });
   }
 }
-
-module.exports = async function fetchSources({ homeTeam, awayTeam }) {
-  const items = [];
-  const st = await trySportyTrader(homeTeam, awayTeam);
-  if (st) items.push(st);
-
-  return { items };
-};
