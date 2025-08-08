@@ -1,167 +1,175 @@
-// Runtime Node 18 pentru Vercel (obligatoriu pentru compatibilitate)
-export const config = { runtime: "nodejs18.x" };
+// api/chat.js — ÎNLOCUIEȘTE CODUL
+// Serverless (Vercel). Primește { match: "Gazdă - Oaspeți" SAU slug/link }, citește surse,
+// apoi cere modelului GPT să livreze analiza în 10 puncte pe stilul stabilit de Florin.
 
-/**
- * API: POST /api/chat
- * Body JSON: { match: "Gazdă – Oaspeți" }
- * Răspuns: { analysis: "text cu 10 puncte" }
- *
- * Comportament:
- * - Dacă există OPENAI_API_KEY => apelează OpenAI (gpt-4o-mini) și generează analiza în 10 puncte (stilul tău cu ✅ ⚠️ 📊 🎯).
- * - Dacă NU există OPENAI_API_KEY sau apare o eroare => fallback local (analiză șablon, fără date inventate).
- *
- * Suportă CORS + preflight.
- */
+import OpenAI from "openai";
+import { fetchAllSources } from "./fetchSources.js";
 
-function allowCors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+// ---------- CONFIG ----------
+const MODEL = process.env.OPENAI_MODEL || "gpt-5"; // fallback: gpt-5 (sau schimbă în gpt-4o dacă preferi)
+const TIMEOUT_MS = 60000;
+
+// Mic utilitar de timeout pentru orice promisiune
+const withTimeout = (p, ms, label = "operation") =>
+  Promise.race([
+    p,
+    new Promise((_, rej) =>
+      setTimeout(() => rej(new Error(`${label} timed out`)), ms)
+    ),
+  ]);
+
+// Normalizează textul (scapă de spații duble, linii foarte lungi)
+function clean(t) {
+  return String(t || "")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
 }
 
-function sanitizeMatch(raw = "") {
-  return String(raw).trim().replace(/\s+/g, " ").slice(0, 140);
-}
+// Construiește promptul pentru GPT (stil Florin – 10 puncte, surse, build-up)
+function buildPrompt({ userMatch, sources }) {
+  // Extragem rapid din surse ce avem
+  const ST = sources?.sportytrader || null;
+  const PZ = sources?.predictz || null;
+  const FB = sources?.forebet || null;
+  const WDW = sources?.windrawwin || null;
 
-// Prompt sistem – formatul în 10 puncte (stilul cerut)
-function buildSystemPrompt() {
-  return [
-    "Ești un analist de pariuri profesionist. Scrii în ROMÂNĂ, compact, clar, fără emoji în exces.",
-    "FORMAT OBLIGATORIU în 10 puncte, cu simboluri:",
-    "1) ✅ Surse & Predicții (SportyTrader, PredictZ, Forebet, WinDrawWin etc.) – arată consensul (✅) și opiniile divergente (⚠️).",
-    "2) 📊 Medie ponderată a predicțiilor.",
-    "3) ⚠️ Impactul pe pronostic (forma, absențe, motivație).",
-    "4) 📈 Formă recentă (ultimele 5 meciuri) + tendințe.",
-    "5) 🚑 Accidentări/Suspendări (doar relevante, actuale).",
-    "6) 🎯 Golgheteri (include goluri din penalty, unde e cazul).",
-    "7) 📊 Statistici: posesie medie, cornere, cartonașe, faulturi (acasă/deplasare când e relevant).",
-    "8) 🧠 Predicție finală ajustată (scor estimat).",
-    "9) 🎯 Recomandări de pariuri (3–5, clare: 1X2, Under/Over, BTTS, cornere etc.).",
-    "10) 🆕 Știri de ultimă oră / zvonuri relevante (doar dacă există; altfel menționează „indisponibil”).",
-    "",
-    "Reguli:",
-    "- Nu inventa surse sau date lipsă. Dacă nu ai date, scrie explicit „indisponibil”.",
-    "- Stil profesionist, direct, lizibil, fără balast.",
-    "- Menține tonul: ferm, dar modest când e cazul. Fii eficient."
-  ].join("\n");
-}
-
-function buildUserPrompt(match) {
-  return [
-    `Meci: ${match}`,
-    "Generează analiza STRICT în 10 puncte, conform formatului din sistem.",
-    "Dacă lipsesc date exacte din surse, marchează „indisponibil”.",
-    "Include alternative acolo unde un meci permite mai multe opțiuni (ex: GG, 1X&GG, câștigă minim o repriză), fiecare cu motivație scurtă.",
-    "Finalizează cu 3–5 recomandări „de jucat”, argumentate succint."
-  ].join("\n");
-}
-
-function fallbackAnalysis(match) {
-  const m = sanitizeMatch(match) || "Meci indisponibil";
-  return [
-    `✅ Surse & Predicții: SportyTrader, PredictZ, Forebet, WinDrawWin – consens/controverse: indisponibil.`,
-    `📊 Medie ponderată a predicțiilor: indisponibil (fără surse automate).`,
-    `⚠️ Impact pe pronostic: forma și absențele cheie – date indisponibile.`,
-    `📈 Formă recentă (ultimele 5): indisponibil.`,
-    `🚑 Accidentări/Suspendări: indisponibil.`,
-    `🎯 Golgheteri (inclusiv penalty-uri): indisponibil.`,
-    `📊 Statistici (posesie, cornere, cartonașe, faulturi): indisponibil.`,
-    `🧠 Predicție finală ajustată (scor estimat): indisponibil fără date reale.`,
-    `🎯 Recomandări de pariuri (orientative, fără garanție):`,
-    `   - 1X (acoperire prudentă) – doar orientativ`,
-    `   - Under/Over 2.5 – doar orientativ`,
-    `   - BTTS – doar orientativ`,
-    `🆕 Știri de ultimă oră: indisponibil.`,
-    "",
-    `Notă: pentru ${m}, datele reale pot fi accesate din butoanele către surse (SportyTrader, PredictZ, Forebet) din interfață.`,
-  ].join("\n");
-}
-
-async function callOpenAI(messages) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return { ok: false, content: null, error: "OPENAI_API_KEY missing" };
-  }
-
-  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`
+  // „Baza factuală” (nu e listă pentru utilizator; e context pentru model)
+  const context = {
+    sportytrader: {
+      title: ST?.title || "",
+      date: ST?.date || "",
+      synopsis: ST?.synopsis || "",
+      picks: (ST?.picks || []).slice(0, 3),
+      url: ST?.url || "",
+      teams: ST?.teams || null,
     },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      temperature: 0.4,
-      messages
-    })
-  });
+    predictz: {
+      title: PZ?.title || "",
+      synopsis: PZ?.synopsis || "",
+      picks: (PZ?.picks || []).slice(0, 3),
+      url: PZ?.url || "",
+    },
+    forebet: {
+      title: FB?.title || "",
+      picks: (FB?.picks || []).slice(0, 3),
+      odds: (FB?.odds || []).slice(0, 2),
+      url: FB?.url || "",
+    },
+    windrawwin: {
+      title: WDW?.title || "",
+      picks: (WDW?.picks || []).slice(0, 3),
+      form: (WDW?.form || []).slice(0, 2),
+      url: WDW?.url || "",
+    },
+  };
 
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    return { ok: false, content: null, error: `OpenAI HTTP ${resp.status}: ${text}` };
-  }
+  const ctxString = "SURSE_BRUTE_JSON:\n" + JSON.stringify(context, null, 2);
 
-  const data = await resp.json();
-  const content = data?.choices?.[0]?.message?.content || "";
-  if (!content.trim()) {
-    return { ok: false, content: null, error: "OpenAI: răspuns gol" };
-  }
-  return { ok: true, content, error: null };
+  // Instrucțiuni stricte de format (stilul tău Grok4 personalizat)
+  const rules = `
+Ești un asistent care livrează EXCLUSIV analiză fotbal în 10 puncte, în română, format compact, fără caractere asiatice.
+Folosește simboluri: ✅ consens, ⚠️ parțial, 📊 statistici, 🎯 recomandări.
+
+1) "Surse & Predicții": compară SportyTrader / PredictZ / Forebet / WinDrawWin. Marchează consensul cu ✅, opiniile parțiale cu ⚠️. Citează pe scurt sursa între paranteze pătrate. Exemplu: "✅ SportyTrader (victorie gazde), ⚠️ Forebet (echilibrat)".
+2) "Medie ponderată a predicțiilor": explică tendința generală (ex: avantaj oaspeți).
+3) "Consens 1X2%": procent orientativ pe 1 / X / 2 bazat pe ce au spus sursele (fără a inventa cote exacte).
+4) "Consens Over/Under%": estimare (ex: Over 2.5 probabil).
+5) "Impact formă & absențe": folosește orice indicii din context; dacă nu există, spune "date insuficiente".
+6) "Golgheteri & penalty-uri": dacă lipsesc date, menționează explicit că nu sunt disponibile.
+7) "📊 Posesie, cornere, galbene, faulturi": dacă nu există date brute, marchează "în lucru". Nu inventa cifre!
+8) "Tendințe ultimele 5 meciuri": rezumă forma (ex: 4/5 în formă bună).
+9) "🎯 Recomandări de jucat": 3–5 selecții clare, fiecare pe linie: 1X2 / Over/Under / BTTS / Cornere, etc. 
+   • include build-up-ul: "Solist sigur (1.4–1.6)", "Valoare ascunsă (1.7–2.0)", "Surpriză controlată (2.1–2.4)". 
+   • Dacă nu ai cote, lasă tipul fără cotă exactă, dar păstrează etichetele.
+10) "Note & verificări": atenționează la absențe de ultim moment / meteo / motivații.
+
+Reguli:
+- Fără paragrafe lungi; liste numerotate 1→10.
+- Evită generalitățile; leagă concluziile de surse.
+- NU inventa statistici sau jucători. Când nu există date, spune scurt "date indisponibile" sau "în lucru".
+- Păstrează ton profesionist, direct, compact.
+`;
+
+  const userTask = `
+Meci: ${userMatch}
+Furnizez mai jos conținutul extras din surse. Folosește-le pentru sinteză, apoi dă analiza în 10 puncte pe formatul de mai sus.
+
+${ctxString}
+  `.trim();
+
+  return { system: rules.trim(), user: userTask };
+}
+
+// Răspuns JSON standard pentru frontend
+function ok(res, payload) {
+  res.status(200).json({ ok: true, ...payload });
+}
+function fail(res, code = 500, message = "Eroare") {
+  res.status(code).json({ ok: false, error: message });
 }
 
 export default async function handler(req, res) {
   try {
-    allowCors(res);
-
-    if (req.method === "OPTIONS") {
-      return res.status(204).end();
-    }
-
-    if (req.method === "GET") {
-      // Health check simplu
-      return res.status(200).json({ status: "ok", endpoint: "api/chat" });
-    }
-
     if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method Not Allowed. Use POST." });
+      res.setHeader("Allow", "POST");
+      return fail(res, 405, "Method Not Allowed");
     }
 
-    // Acceptă atât body JSON, cât și query string ?match=
-    let body = {};
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return fail(res, 500, "OPENAI_API_KEY lipsă");
+
+    const body = req.body || {};
+    const match = clean(body.match || body.meci || body.query || "");
+    if (!match) return fail(res, 400, "Parametrul 'match' este obligatoriu");
+
+    // 1) Citește surse (SportyTrader, PredictZ, Forebet, WinDrawWin) prin fetchSources.js
+    let sources = {};
     try {
-      body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-    } catch {
-      body = {};
-    }
-    const match = sanitizeMatch(body.match || req.query?.match || "");
-
-    if (!match) {
-      return res.status(400).json({ error: "Parametrul 'match' este obligatoriu (ex: \"Rapid – FCSB\")." });
+      sources = await withTimeout(fetchAllSources(match), TIMEOUT_MS, "fetchAllSources");
+    } catch (e) {
+      // dacă pică sursele, mergem doar cu GPT (dar semnalăm „date limitate”)
+      sources = {};
     }
 
-    // Construim mesaje pentru OpenAI
-    const systemPrompt = buildSystemPrompt();
-    const userPrompt = buildUserPrompt(match);
-    const messages = [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ];
+    // 2) Construiește promptul strict pe formatul Florin (10 puncte + simboluri)
+    const { system, user } = buildPrompt({ userMatch: match, sources });
 
-    // Încercare OpenAI
-    const ai = await callOpenAI(messages);
+    const client = new OpenAI({ apiKey });
 
-    if (ai.ok) {
-      return res.status(200).json({ analysis: ai.content });
-    }
+    // 3) Cere analiza modelului
+    const completion = await withTimeout(
+      client.chat.completions.create({
+        model: MODEL,
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+      TIMEOUT_MS,
+      "openai"
+    );
 
-    // Fallback local dacă nu există cheie sau a eșuat apelul
-    const fallback = fallbackAnalysis(match);
-    return res.status(200).json({
-      analysis: fallback,
-      note: ai.error ? `Fallback local (motiv: ${ai.error})` : "Fallback local (fără OPENAI_API_KEY)"
+    const text =
+      completion?.choices?.[0]?.message?.content?.trim() ||
+      "Nu am reușit să generez analiza.";
+
+    // 4) Răspuns către UI — includ și sursele brute ca să le poți afișa / debuga
+    return ok(res, {
+      model: MODEL,
+      match,
+      analysis: text,
+      sources: {
+        sportytrader: sources?.sportytrader || null,
+        predictz: sources?.predictz || null,
+        forebet: sources?.forebet || null,
+        windrawwin: sources?.windrawwin || null,
+      },
     });
-
   } catch (err) {
-    return res.status(500).json({ error: String(err?.message || err || "Eroare necunoscută") });
+    return fail(res, 500, err?.message || "Eroare server");
   }
 }
