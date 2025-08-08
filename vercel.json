@@ -2,13 +2,9 @@
   "version": 2,
   "functions": {
     "api/*.js": {
-      "runtime": "nodejs18.x",
+      "runtime": "nodejs20.x",
       "memory": 512,
       "maxDuration": 30
     }
-  },
-  "routes": [
-    { "src": "/api/chat", "dest": "/api/chat.js" },
-    { "src": "/api/fetchSources", "dest": "/api/fetchSources.js" }
-  ]
+  }
 }
