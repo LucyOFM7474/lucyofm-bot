@@ -1,59 +1,67 @@
-// public/script.js – complet, cu fix pentru HTTP 400
+const $ = (s) => document.querySelector(s);
+const out = $("#out");
+const statusBox = $("#status");
+let lastAnalysisId = null;
 
-async function generateAnalysis() {
-  const btn = document.getElementById('genBtn');
-  const out = document.getElementById('output');
-  const raw = document.getElementById('matchInput').value || "";
+function setOut(text) { out.value = text || ""; }
+function setStatus(s) { statusBox.textContent = s || ""; }
 
-  // Acceptă "-" sau "–", cu sau fără spații
-  const parts = raw.split(/[-–]/).map(s => s.trim()).filter(Boolean);
-  if (parts.length !== 2) {
-    out.value = "Format invalid. Scrie exact: Gazdă - Oaspete (ex: FC Copenhaga - Aarhus).";
+$("#go").addEventListener("click", async () => {
+  const match = $("#match").value.trim();
+  if (!match || !match.includes("-")) {
+    setOut("Te rog scrie meciul în format: Gazdă – Oaspeți (cu cratimă).");
     return;
   }
-  const [homeTeam, awayTeam] = parts;
+  const [home, away] = match.split("-").map(s => s.trim());
 
-  btn.disabled = true;
-  out.value = "Se generează analiza...";
+  setOut("Se generează analiza... (poate dura câteva secunde)");
+  setStatus("");
+  lastAnalysisId = null;
 
   try {
-    const resp = await fetch("/api/chat", {
+    const r = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        homeTeam,
-        awayTeam,
-        league: "",
-        date: "",
-        localeDate: "",
-        extraNote: "",
-        model: "gpt-4o-mini"
-      })
+      body: JSON.stringify({ homeTeam: home, awayTeam: away })
     });
 
-    const data = await resp.json();
-    if (!resp.ok) {
-      out.value = `Eroare API (${resp.status}): ${data.error || "necunoscută"}`;
+    const data = await r.json().catch(() => ({}));
+
+    if (!r.ok || !data.ok) {
+      const err = data?.error || data?.detail || `HTTP ${r.status}`;
+      setOut(`Eroare API (${r.status}): ${err}`);
       return;
     }
 
-    out.value = data.analysis || "Nu s-a generat conținut.";
+    setOut(data.analysis || "Fără conținut.");
+    lastAnalysisId = data?.saved?.analysisId || null;
+    setStatus(`Model: ${data?.meta?.model || "n/a"}${lastAnalysisId ? " • ID: " + lastAnalysisId : ""}`);
   } catch (e) {
-    out.value = "Eroare de rețea: " + (e?.message || e);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-// Pornirea generării la apăsarea Enter în câmpul de meci
-document.addEventListener("DOMContentLoaded", () => {
-  const input = document.getElementById('matchInput');
-  if (input) {
-    input.addEventListener('keypress', (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        generateAnalysis();
-      }
-    });
+    setOut(`Eroare rețea: ${e.message || e}`);
   }
 });
+
+$("#voteUp").addEventListener("click", () => sendVote("up"));
+$("#voteDown").addEventListener("click", () => sendVote("down"));
+
+async function sendVote(vote) {
+  if (!lastAnalysisId) {
+    setStatus("Nu există o analiză salvată.");
+    return;
+  }
+  try {
+    const r = await fetch("/api/chat", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ analysisId: lastAnalysisId, vote })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.ok) {
+      setStatus(`Eroare la feedback: ${data?.error || "necunoscută"}`);
+      return;
+    }
+    setStatus("Feedback salvat. Mulțumesc!");
+  } catch (e) {
+    setStatus(`Eroare rețea: ${e.message || e}`);
+  }
+}
