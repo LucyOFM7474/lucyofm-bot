@@ -10,13 +10,8 @@
   const fbGood = $("#fbGood");
   const fbBad  = $("#fbBad");
 
-  const API_BASE = ""; // același domeniu (Vercel)
-
   function setLoading(on){
-    if(btn){
-      btn.disabled = !!on;
-      btn.textContent = on ? "Se generează..." : "Generează analiza";
-    }
+    if(btn){ btn.disabled = !!on; btn.textContent = on ? "Se generează..." : "Generează analiza"; }
     if(on) setStatus("Se pregătesc sursele...");
   }
   function setStatus(msg){ if(status) status.textContent = msg || ""; }
@@ -31,7 +26,7 @@
   }
 
   async function fetchSourceLinks(home, away){
-    const r = await fetch(`${API_BASE}/api/fetchSources?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}`);
+    const r = await fetch(`/api/fetchSources?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}`);
     const data = await r.json().catch(()=>null);
     if(!r.ok) throw new Error(data?.error || `fetchSources ${r.status}`);
     return data?.urls || {};
@@ -58,40 +53,27 @@
     sourcesBar.appendChild(wrap);
   }
 
-  function renderResult(text){
-    resultBox.innerHTML = `<pre class="result-pre">${htmlEscape(text)}</pre>`;
-  }
-
-  function normalizeAnalysisPayload(data){
-    if(!data) return "";
-    if(typeof data === "string") return data;
-    return data.content || data.text || data.result || data.message || JSON.stringify(data, null, 2);
-  }
+  function renderResult(text){ resultBox.innerHTML = `<pre class="result-pre">${htmlEscape(text)}</pre>`; }
+  function normalizeAnalysisPayload(d){ if(!d) return ""; if(typeof d==="string") return d; return d.content || d.text || d.result || d.message || JSON.stringify(d,null,2); }
 
   async function runAnalysis(){
     try{
       const raw = input?.value || "";
       const {home, away} = parseMatch(raw);
-      if(!home || !away){
-        setStatus("Status: Scrie meciul corect. Exemplu: „Korona Kielce – Radomiak”.");
-        return;
-      }
+      if(!home || !away){ setStatus("Status: Scrie meciul corect. Exemplu: „Korona Kielce – Radomiak”."); return; }
 
       setLoading(true);
 
-      // 1) Linkuri surse (nu blocăm analiza dacă pică)
       let links = {};
       try{ links = await fetchSourceLinks(home, away); renderSourcesBar(links); }
       catch(e){ console.warn("Links error:", e?.message || e); renderSourcesBar({}); }
 
       setStatus("Generez analiza în 10 puncte...");
 
-      // 2) Apel la /api/chat
-      const body = { home, away, sources: links };
-      const r = await fetch(`${API_BASE}/api/chat`, {
+      const r = await fetch(`/api/chat`, {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ home, away, sources: links })
       });
       const data = await r.json().catch(()=>null);
       if(!r.ok) throw new Error(data?.error || `Chat API ${r.status}`);
@@ -111,7 +93,7 @@
   async function sendFeedback(type){
     setStatus("Mulțumim pentru feedback.");
     try{
-      await fetch(`${API_BASE}/api/feedback`, {
+      await fetch(`/api/feedback`, {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ type, ts: Date.now() })
