@@ -1,30 +1,64 @@
-// api/fetchSources.js — construiește link-urile către surse (fără scraping)
+// Runtime Node 18 pentru Vercel
+export const config = { runtime: "nodejs18.x" };
 
-function slugify(s) {
-  return String(s || "")
+/**
+ * API: GET /api/fetchSources?match=Rapid%20-%20FCSB
+ * Răspuns: { sportytrader, forebet, predictz }
+ *
+ * Nu face scraping. Doar construiește linkuri directe către paginile de predicții.
+ */
+
+function allowCors(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+function slugify(ro) {
+  if (!ro) return "";
+  const s = String(ro)
     .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/\s*-\s*/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/ă/g, "a")
+    .replace(/â/g, "a")
+    .replace(/î/g, "i")
+    .replace(/ș/g, "s")
+    .replace(/ţ/g, "t")
+    .replace(/ț/g, "t")
+    .replace(/[^a-z0-9\-]/g, "")
+    .replace(/\-+/g, "-")
+    .replace(/^\-|\-$/g, "");
+  return s;
 }
 
 export default async function handler(req, res) {
   try {
-    const { home = "", away = "" } = req.query || {};
-    const H = slugify(home), A = slugify(away);
-    if (!H || !A) return res.status(400).json({ error: "Parametrii 'home' și 'away' sunt necesari." });
+    allowCors(res);
 
-    const formatted = `${H}-${A}`;
-    return res.status(200).json({
-      ok: true,
-      formatted,
-      urls: {
-        sportytrader: `https://www.sportytrader.com/ro/pronosticuri/${formatted}/`,
-        forebet: `https://www.forebet.com/en/football-predictions/${H}-${A}`,
-        predictz: `https://www.predictz.com/predictions/${H}-${A}/`
-      }
-    });
+    if (req.method === "OPTIONS") {
+      return res.status(204).end();
+    }
+
+    if (req.method !== "GET") {
+      return res.status(405).json({ error: "Method Not Allowed. Use GET." });
+    }
+
+    const match = String(req.query?.match || "").trim();
+    if (!match) {
+      return res.status(400).json({ error: "Parametrul 'match' este obligatoriu (ex: Rapid – FCSB)." });
+    }
+
+    const formatted = slugify(match);
+
+    const links = {
+      sportytrader: `https://www.sportytrader.com/ro/pronosticuri/${formatted}/`,
+      forebet: `https://www.forebet.com/ro/predictii-pentru-${formatted}`,
+      predictz: `https://www.predictz.com/predictions/${formatted}/`
+    };
+
+    return res.status(200).json(links);
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Eroare internă" });
+    return res.status(500).json({ error: String(err?.message || err || "Eroare necunoscută") });
   }
 }
