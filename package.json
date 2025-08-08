@@ -1,20 +1,21 @@
 {
-  "name": "lucyofm-mongodb-bot",
+  "name": "lucyofm-bot",
   "version": "1.0.0",
-  "private": true,
+  "description": "LucyOFM – Analize Meciuri, cu GPT și MongoDB",
+  "main": "api/chat.js",
   "type": "commonjs",
+  "scripts": {
+    "start": "vercel dev",
+    "dev": "vercel dev",
+    "build": "echo 'Vercel build step'"
+  },
+  "dependencies": {
+    "openai": "^4.0.0",
+    "mongodb": "^5.7.0",
+    "node-fetch": "^3.3.2"
+  },
   "engines": {
     "node": ">=18"
   },
-  "scripts": {
-    "dev": "node --watch api/chat.js",
-    "start": "node api/chat.js",
-    "test": "echo \"No tests yet\" && exit 0"
-  },
-  "dependencies": {
-    "axios": "^1.7.4",
-    "cheerio": "^1.0.0",
-    "mongodb": "^6.7.0",
-    "dayjs": "^1.11.13"
-  }
+  "license": "MIT"
 }
