@@ -1,7 +1,0 @@
-{
-  "name": "lucyofm-bot",
-  "type": "module",
-  "dependencies": {
-    "openai": "^4.52.7"
-  }
-}
