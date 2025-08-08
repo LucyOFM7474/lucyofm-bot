@@ -1,4 +1,4 @@
-// public/script.js
+// public/script.js — UI + apeluri API
 (function () {
   const $ = (sel) => document.querySelector(sel);
 
@@ -19,14 +19,8 @@
     }
     if(on) setStatus("Se pregătesc sursele...");
   }
-
-  function setStatus(msg){
-    if(status) status.textContent = msg || "";
-  }
-
-  function htmlEscape(s){
-    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  }
+  function setStatus(msg){ if(status) status.textContent = msg || ""; }
+  function htmlEscape(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
   // suportă -, – și —
   function parseMatch(text){
@@ -36,24 +30,32 @@
     return { home: parts[0], away: parts.slice(1).join(" - ") };
   }
 
-  async function fetchSportyLink(home, away){
-    const url = `${API_BASE}/api/fetchSources?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}`;
-    const r = await fetch(url);
+  async function fetchSourceLinks(home, away){
+    const r = await fetch(`${API_BASE}/api/fetchSources?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}`);
     const data = await r.json().catch(()=>null);
     if(!r.ok) throw new Error(data?.error || `fetchSources ${r.status}`);
-    return data; // { ok, url, formatted, source }
+    return data?.urls || {};
   }
 
-  function renderSourcesBar(obj){
+  function renderSourcesBar(urls){
     if(!sourcesBar) return;
     sourcesBar.innerHTML = "";
-    if(obj?.url){
+    const wrap = document.createElement("div");
+    wrap.style.display = "flex"; wrap.style.gap = "8px"; wrap.style.flexWrap = "wrap";
+
+    const add = (label, url) => {
+      if(!url) return;
       const a = document.createElement("a");
-      a.href = obj.url; a.target = "_blank"; a.rel = "noopener";
-      a.className = "btn btn-secondary";
-      a.textContent = "Deschide SportyTrader";
-      sourcesBar.appendChild(a);
-    }
+      a.href = url; a.target="_blank"; a.rel="noopener";
+      a.className = "btn btn-secondary"; a.textContent = label;
+      wrap.appendChild(a);
+    };
+
+    add("Deschide SportyTrader", urls.sportytrader);
+    add("Deschide Forebet", urls.forebet);
+    add("Deschide PredictZ", urls.predictz);
+
+    sourcesBar.appendChild(wrap);
   }
 
   function renderResult(text){
@@ -61,10 +63,8 @@
   }
 
   function normalizeAnalysisPayload(data){
-    // Acoperă toate cazurile văzute în pozele tale
     if(!data) return "";
     if(typeof data === "string") return data;
-    // preferă câmpuri textuale cunoscute
     return data.content || data.text || data.result || data.message || JSON.stringify(data, null, 2);
   }
 
@@ -72,7 +72,6 @@
     try{
       const raw = input?.value || "";
       const {home, away} = parseMatch(raw);
-
       if(!home || !away){
         setStatus("Status: Scrie meciul corect. Exemplu: „Korona Kielce – Radomiak”.");
         return;
@@ -80,27 +79,20 @@
 
       setLoading(true);
 
-      // 1) Link SportyTrader (nu blocăm analiza dacă pică)
-      let sporty=null;
-      try{
-        sporty = await fetchSportyLink(home, away);
-        renderSourcesBar(sporty);
-      }catch(e){
-        console.warn("SportyTrader link error:", e?.message || e);
-        renderSourcesBar(null);
-      }
+      // 1) Linkuri surse (nu blocăm analiza dacă pică)
+      let links = {};
+      try{ links = await fetchSourceLinks(home, away); renderSourcesBar(links); }
+      catch(e){ console.warn("Links error:", e?.message || e); renderSourcesBar({}); }
 
       setStatus("Generez analiza în 10 puncte...");
 
-      // 2) Apelul principal la /api/chat (trecem sursa ca indiciu)
-      const body = { home, away, query:`${home} - ${away}`, sources:{ sportytrader: sporty?.url || null } };
-
+      // 2) Apel la /api/chat
+      const body = { home, away, sources: links };
       const r = await fetch(`${API_BASE}/api/chat`, {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify(body)
       });
-
       const data = await r.json().catch(()=>null);
       if(!r.ok) throw new Error(data?.error || `Chat API ${r.status}`);
 
@@ -116,7 +108,6 @@
     }
   }
 
-  // Feedback (opțional – dacă nu ai endpoint, nu fac nimic critic)
   async function sendFeedback(type){
     setStatus("Mulțumim pentru feedback.");
     try{
@@ -128,7 +119,6 @@
     }catch(_){}
   }
 
-  // Hooks
   btn?.addEventListener("click", runAnalysis);
   input?.addEventListener("keydown", (e)=>{ if(e.key==="Enter") runAnalysis(); });
   fbGood?.addEventListener("click", ()=>sendFeedback("good"));
