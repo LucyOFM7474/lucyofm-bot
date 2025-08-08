@@ -1,7 +1,7 @@
 // api/chat.js
-// GET = health-check; POST = generare analiză în 10 puncte (cu fallback local dacă lipsește cheia).
+// Analiză în 10 puncte. Acceptă GET (healthcheck) și POST (analiză).
 
-export const config = { runtime: "nodejs18.x" };
+export const config = { runtime: "nodejs20.x" };
 
 function sanitize(s) {
   return String(s || "").trim().replace(/\s+/g, " ");
@@ -16,33 +16,33 @@ function buildPrompt({ home, away, sources = {} }) {
   };
 
   return `
-Ești un analist profesionist de pariuri. Dă analiza în 10 puncte (structura fixă de mai jos), concis, clar, cu bullet-uri și formulări „de jucat”.
-Folosește simboluri: ✅ (consens/puternic), ⚠️ (incert), 📊 (statistici), 🎯 (recomandare). Nu inventa surse; dacă lipsesc, marchează „indisponibil”.
+Ești un analist profesionist de pariuri. Dă analiza în 10 puncte, concis, cu bullet-uri.
+Simboluri: ✅ (puternic), ⚠️ (incert), 📊 (statistici), 🎯 (recomandare). Nu inventa surse.
 
 Meci: ${match}
 
-Surse (deschide doar dacă există):
+Surse:
 - SportyTrader: ${s.sporty || "indisponibil"}
 - Forebet: ${s.forebet || "indisponibil"}
 - PredictZ: ${s.predictz || "indisponibil"}
 
 STRUCTURA (exact 10 puncte):
-1) Surse & Predicții (✅/⚠️, enumeră pe scurt ce spune fiecare sursă)
-2) Medie ponderată a predicțiilor (explică pe scurt)
-3) Consens 1X2 (BTTS dacă există)
+1) Surse & Predicții (pe scurt; ✅/⚠️)
+2) Medie ponderată a predicțiilor (2–3 rânduri)
+3) Consens 1X2 / BTTS
 4) Consens Over/Under (linii principale)
-5) Impact formă & absențe (pe scurt, fără invenții)
-6) Golgheteri & penalty-uri (dacă nu ai surse, marchează ca „necesită surse dedicate”)
-7) Statistici: posesie, cornere, galbene, faulturi (📊, dacă lipsesc, notează „în lucru”)
-8) Tendințe din ultimele 5 meciuri (fără invenții)
-9) Recomandări „de jucat” (3–5 opțiuni, în ordinea încrederii)
+5) Impact formă & absențe
+6) Golgheteri & penalty-uri
+7) 📊 Statistici: posesie, cornere, galbene, faulturi (dacă lipsesc, marchează)
+8) Tendințe ultimele 5 meciuri
+9) 🎯 Recomandări „de jucat” (3–5 opțiuni, în ordinea încrederii)
 10) Note & verificări (atenționări utile)
 
-Formatare: liste cu „- ”, simboluri, text scurt.
+Format: liste cu „- ”, text scurt, clar.
   `.trim();
 }
 
-function localFallback({ home, away, sources = {} }) {
+function localFallback({ sources = {} }) {
   const mk = (x) => (x ? x : "indisponibil");
   return [
     `1) Surse & Predicții`,
@@ -60,35 +60,30 @@ function localFallback({ home, away, sources = {} }) {
     `- ⚠️ Lipsă cote/estimări confirmate.`,
     ``,
     `5) Impact formă & absențe`,
-    `- ⚠️ Necesar feed de echipe & absențe.`,
+    `- ⚠️ Necesită feed echipe/absențe.`,
     ``,
     `6) Golgheteri & penalty-uri`,
     `- 📌 Necesită surse dedicate marcatorilor.`,
     ``,
-    `7) 📊 Statistici: posesie, cornere, galbene, faulturi`,
+    `7) 📊 Statistici`,
     `- În lucru – se vor popula când sursele devin stabile.`,
     ``,
     `8) Tendințe ultimele 5 meciuri`,
     `- În lucru – necesită agregare istoric.`,
     ``,
-    `9) 🎯 Recomandări „de jucat” (în ordinea încrederii)`,
-    `- ⚠️ Nicio recomandare fermă fără consens minim.`,
+    `9) 🎯 Recomandări „de jucat”`,
+    `- ⚠️ Nicio recomandare fără consens minim.`,
     ``,
     `10) Note & verificări`,
-    `- Dacă o sursă este blocată temporar, analiza degradează elegant (fără a „inventa”).`,
+    `- Dacă o sursă e blocată, analiza degradează elegant (fără a inventa).`,
   ].join("\n");
 }
 
 export default async function handler(req, res) {
   try {
-    // ✅ Health-check (poți testa direct în browser)
+    // Healthcheck rapid la GET
     if (req.method === "GET") {
-      return res.status(200).json({
-        ok: true,
-        service: "LucyOFM – api/chat",
-        method: "GET",
-        hint: "Trimite POST cu {home, away, sources?} pentru analiza în 10 puncte."
-      });
+      return res.status(200).json({ ok: true, service: "LucyOFM – api/chat", node: process.version });
     }
 
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -101,10 +96,11 @@ export default async function handler(req, res) {
 
     const apiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_BOT || "";
     if (!apiKey) {
-      return res.status(200).json({ content: localFallback({ home: H, away: A, sources }) });
+      // Fără OpenAI → fallback local
+      return res.status(200).json({ content: localFallback({ sources }) });
     }
 
-    // REST call la OpenAI (chat.completions)
+    // Apel REST către OpenAI (chat.completions)
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -115,7 +111,7 @@ export default async function handler(req, res) {
         model: "gpt-4o-mini",
         temperature: 0.2,
         messages: [
-          { role: "system", content: "Ești un analist de pariuri. Răspunde concis, cu liste clare." },
+          { role: "system", content: "Ești un analist de pariuri. Răspunde concis, structurat, fără invenții." },
           { role: "user", content: prompt }
         ]
       })
@@ -125,11 +121,11 @@ export default async function handler(req, res) {
     if (!r.ok) {
       return res.status(r.status).json({
         warning: data?.error?.message || "OpenAI indisponibil",
-        content: localFallback({ home: H, away: A, sources })
+        content: localFallback({ sources })
       });
     }
 
-    const content = data?.choices?.[0]?.message?.content || localFallback({ home: H, away: A, sources });
+    const content = data?.choices?.[0]?.message?.content || localFallback({ sources });
     return res.status(200).json({ content });
   } catch (err) {
     return res.status(500).json({ error: err?.message || "Eroare internă" });
