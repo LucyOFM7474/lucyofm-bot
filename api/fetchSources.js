@@ -1,7 +1,4 @@
-// api/fetchSources.js
-// Returnează linkuri către paginile relevante (fără scraping).
-
-export const config = { runtime: "nodejs20.x" };
+// api/fetchSources.js — construiește link-urile către surse (fără scraping)
 
 function slugify(s) {
   return String(s || "")
@@ -18,14 +15,14 @@ export default async function handler(req, res) {
     if (!H || !A) return res.status(400).json({ error: "Parametrii 'home' și 'away' sunt necesari." });
 
     const formatted = `${H}-${A}`;
-    const sportytrader = `https://www.sportytrader.com/ro/pronosticuri/${formatted}/`;
-    const forebet      = `https://www.forebet.com/en/football-predictions/${H}-${A}`;
-    const predictz     = `https://www.predictz.com/predictions/${H}-${A}/`;
-
     return res.status(200).json({
       ok: true,
       formatted,
-      urls: { sportytrader, forebet, predictz }
+      urls: {
+        sportytrader: `https://www.sportytrader.com/ro/pronosticuri/${formatted}/`,
+        forebet: `https://www.forebet.com/en/football-predictions/${H}-${A}`,
+        predictz: `https://www.predictz.com/predictions/${H}-${A}/`
+      }
     });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err?.message || "Eroare internă" });
