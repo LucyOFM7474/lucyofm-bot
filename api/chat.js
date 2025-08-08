@@ -7,7 +7,7 @@ function buildPrompt({ home, away, sources = {} }) {
   const s = {
     sporty: sources?.sportytrader || sources?.sporty || null,
     forebet: sources?.forebet || null,
-    predictz: sources?.predictz || null,
+    predictz: sources?.predictz || null
   };
   return `
 Ești un analist profesionist de pariuri. Livrează analiza în 10 puncte, concis, cu simboluri:
@@ -33,7 +33,7 @@ STRUCTURA FIXĂ:
 `.trim();
 }
 
-function localFallback({ home, away, sources = {} }) {
+function localFallback({ sources = {} }) {
   const mk = (x) => (x ? x : "indisponibil");
   return [
     `1) Surse & Predicții`,
@@ -49,7 +49,7 @@ function localFallback({ home, away, sources = {} }) {
     `7) 📊 Posesie/cornere/galbene/faulturi: în lucru.`,
     `8) Tendințe 5 meciuri: în lucru.`,
     `9) 🎯 De jucat: nimic fără consens minim.`,
-    `10) Note: nu inventez când lipsesc date.`,
+    `10) Note: nu inventez când lipsesc date.`
   ].join("\n");
 }
 
@@ -68,16 +68,12 @@ export default async function handler(req, res) {
     const prompt = buildPrompt({ home: H, away: A, sources });
 
     if (!apiKey) {
-      // Fără cheie: livrăm formatul corect, dar fără recomandări ferme
-      return res.status(200).json({ content: localFallback({ home: H, away: A, sources }) });
+      return res.status(200).json({ content: localFallback({ sources }) });
     }
 
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0.2,
@@ -92,11 +88,11 @@ export default async function handler(req, res) {
     if (!r.ok) {
       return res.status(r.status).json({
         warning: data?.error?.message || "OpenAI indisponibil",
-        content: localFallback({ home: H, away: A, sources })
+        content: localFallback({ sources })
       });
     }
 
-    const content = data?.choices?.[0]?.message?.content || localFallback({ home: H, away: A, sources });
+    const content = data?.choices?.[0]?.message?.content || localFallback({ sources });
     return res.status(200).json({ content });
   } catch (err) {
     return res.status(500).json({ error: err?.message || "Eroare internă" });
