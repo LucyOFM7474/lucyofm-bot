@@ -1,238 +1,273 @@
-// api/fetchSources.js — ÎNLOCUIEȘTE CODUL
+// api/fetchSources.js
 import axios from "axios";
 import * as cheerio from "cheerio";
 
-const SCRAPER_KEY = process.env.SCRAPER_API_KEY || "";
 const TIMEOUT = 25000;
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
 
-// ---------------- HTTP (cu/fără ScraperAPI) ----------------
-async function getHTML(url) {
-  const headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
-  };
-  if (SCRAPER_KEY) {
-    const apiUrl = `https://api.scraperapi.com?api_key=${SCRAPER_KEY}&url=${encodeURIComponent(
-      url
-    )}&keep_headers=true`;
-    const { data } = await axios.get(apiUrl, { timeout: TIMEOUT, headers });
-    return typeof data === "string" ? data : String(data || "");
-  }
-  const { data } = await axios.get(url, { timeout: TIMEOUT, headers });
-  return typeof data === "string" ? data : String(data || "");
+const t = (s) => String(s || "").replace(/\s+/g, " ").trim();
+
+// --------------- HTTP ---------------
+async function get(url) {
+  const { data } = await axios.get(url, {
+    timeout: TIMEOUT,
+    headers: { "User-Agent": UA, "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8" },
+    validateStatus: (st) => st >= 200 && st < 500,
+  });
+  return { ok: true, html: String(data || ""), url };
 }
 
-// ---------------- URL builder ----------------
-function buildSourceUrls(slugOrUrl) {
-  if (/^https?:\/\//i.test(slugOrUrl)) {
-    // dacă e link direct, îl tratăm ca SportyTrader
-    return [{ key: "sportytrader", url: slugOrUrl }];
-  }
-  const slug = String(slugOrUrl).trim().replace(/^\/+|\/+$/g, "");
+// --------------- Normalize / slug ---------------
+const normalize = (s) =>
+  String(s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const slugify = (s) =>
+  normalize(s)
+    .toLowerCase()
+    .replace(/\s+/g, "-");
+
+// --------------- Candidates per source ---------------
+function sportyCandidates(home, away) {
+  const h = slugify(home), a = slugify(away);
+  // încercăm câteva forme uzuale ale slugs
   return [
-    { key: "sportytrader", url: `https://www.sportytrader.com/ro/pronosticuri/${slug}/` },
-    { key: "predictz", url: `https://www.predictz.com/predictions/${slug}/` },
-    { key: "forebet", url: `https://www.forebet.com/en/predictions/${slug}` },
-    { key: "windrawwin", url: `https://www.windrawwin.com/tips/${slug}/` },
+    `https://www.sportytrader.com/ro/pronosticuri/${h}-${a}/`,
+    `https://www.sportytrader.com/ro/pronosticuri/${a}-${h}/`,
+    `https://www.sportytrader.com/ro/pronosticuri/${h}-vs-${a}/`,
+    `https://www.sportytrader.com/ro/pronosticuri/${a}-vs-${h}/`,
   ];
 }
 
-// ---------------- Parsere ----------------
-function textClean(s) {
-  return String(s || "").replace(/\s+/g, " ").trim();
+function predictzCandidates(home, away) {
+  const h = slugify(home), a = slugify(away);
+  return [
+    `https://www.predictz.com/predictions/${h}-vs-${a}/`,
+    `https://www.predictz.com/predictions/${a}-vs-${h}/`,
+  ];
 }
 
+function forebetCandidates(home, away) {
+  const h = slugify(home), a = slugify(away);
+  return [
+    `https://www.forebet.com/en/predictions/${h}-${a}`,
+    `https://www.forebet.com/en/predictions/${a}-${h}`,
+  ];
+}
+
+// --------------- Parsers ---------------
 function parseSportyTrader(html, url) {
   const $ = cheerio.load(html);
-  const title = $("h1").first().text().trim() || $("title").text().trim();
+  const title = t($("h1").first().text()) || t($("title").text());
   const metaDesc = $('meta[name="description"]').attr("content") || "";
-  const date =
-    $('[itemprop="startDate"]').attr("content") || $("time").first().attr("datetime") || "";
+  const date = $('[itemprop="startDate"]').attr("content") || $("time").first().attr("datetime") || "";
 
-  // Echipe din titlu
-  let teams = title.includes(" - ") ? title.split(" - ") : title.split(" vs ");
-  teams = teams.map((s) => s.trim());
-  const teamsObj = teams.length >= 2 ? { home: teams[0], away: teams[1] } : null;
-
-  // --- 1) Puncte cheie (blocul numerotat 1..5) ---
-  const keyPoints = [];
-  // căutăm heading „Puncte cheie” (RO/EN) și luăm elementele enumerate din secțiunea următoare
-  $('h2:contains("Puncte cheie"), h2:contains("Key points")')
-    .first()
-    .parent()
-    .find("li, .list li, p")
-    .each((_, el) => {
-      const t = textClean($(el).text());
-      if (t && /\d/.test(t)) keyPoints.push(t);
-    });
-  if (!keyPoints.length) {
-    // fallback: căutăm „Puncte cheie” ca text și colectăm paragrafele din container
-    $('*:contains("Puncte cheie")')
-      .filter((_, el) => /Puncte cheie/i.test($(el).text()))
-      .first()
-      .parent()
-      .find("li, p")
-      .each((_, el) => {
-        const t = textClean($(el).text());
-        if (t) keyPoints.push(t);
-      });
+  // Echipe (din H1 de tip "Oxford - Portsmouth")
+  let teams = null;
+  if (title.includes(" - ")) {
+    const [home, away] = title.split(" - ").map((x) => t(x));
+    if (home && away) teams = { home, away };
+  } else if (title.toLowerCase().includes(" vs ")) {
+    const [home, away] = title.split(/vs/i).map((x) => t(x));
+    if (home && away) teams = { home, away };
   }
 
-  // --- 2) Predicția noastră (blocul cu butonul „Predicție”) ---
+  // 1) blocul cu "Pronosticul nostru" / "Predicția noastră" / "Our prediction"
   let prediction = "";
-  // căutăm heading „Pronosticul nostru / Predicția noastră / Our prediction”
-  const predSection =
-    $('h2:contains("Pronosticul nostru"), h2:contains("Predicția noastră"), h2:contains("Our prediction")')
-      .first()
-      .parent();
-  if (predSection && predSection.length) {
-    // textul din paragraf + eventual butonul „Predicție”
-    const paragraph = textClean(predSection.find("p").first().text());
-    // buton/box cu textul predicției
-    const btnText =
-      textClean(
-        predSection
-          .find('button, a, div:contains("Predic")')
-          .filter((_, el) => /Predic/i.test($(el).text()))
-          .first()
-          .text()
-      ) || "";
-    prediction = btnText || paragraph;
-  }
-  if (!prediction) {
-    // fallback global: orice text „Predicție:” vizibil pe pagină
-    prediction = textClean($('*:contains("Predicție")').first().text());
+  const predH2 = $('h2:contains("Pronosticul nostru"), h2:contains("Predicția noastră"), h2:contains("Our prediction")').first();
+
+  if (predH2.length) {
+    // căutăm în containerul secțiunii caseta cu textul predicției
+    const container = predH2.parent();
+
+    // frecvent apare o frază clară în paragrafele imediat următoare
+    const candidates = container.find("p, div, span, strong, em").toArray().map(el => t($(el).text())).filter(Boolean);
+
+    // regulile de extragere (în română / engleză)
+    const pick = candidates.find(x =>
+      /va câștiga|câștigă meciul|câștigă|will win|X2|1X|12|or draw|double chance/i.test(x)
+    );
+    if (pick) prediction = pick;
   }
 
-  // Adunăm câteva „picks” (inclusiv predicția) pentru uniformizare
-  const picks = [];
-  if (prediction) picks.push(prediction);
-  keyPoints.slice(0, 5).forEach((pp) => picks.push(pp));
+  // 2) fallback global – scanăm tot corpul după fraze-cheie
+  if (!prediction) {
+    const full = t($("body").text());
+
+    // dublă șansă / rezultate fixe
+    const mChance = full.match(/\b(X2|1X|12)\b/i);
+    const mWin = full.match(/([A-Z][A-Za-z0-9 .'\-]{2,40})\s+(va\s+câștiga|câștigă|will\s+win)\s+(meciul|match)/i);
+    const mVict = full.match(/victorie\s+([A-Z][A-Za-z0-9 .'\-]{2,40})/i);
+
+    if (mWin) prediction = `${mWin[1]} câștigă meciul`;
+    else if (mVict) prediction = `Victorie ${mVict[1]}`;
+    else if (mChance) prediction = mChance[1].toUpperCase();
+  }
 
   return {
     source: "SportyTrader",
     url,
     title,
     date,
-    teams: teamsObj,
     synopsis: metaDesc,
-    keyPoints,
-    prediction, // <- câmp fix, cu „X2 / victorie / etc.”
-    picks,
+    prediction: t(prediction),
   };
 }
 
 function parsePredictZ(html, url) {
   const $ = cheerio.load(html);
-  const title = $("h1").first().text().trim() || $("title").text().trim();
+  const title = t($("h1").first().text()) || t($("title").text());
   const metaDesc = $('meta[name="description"]').attr("content") || "";
-  const predictionText =
-    $('strong:contains("Prediction")').parent().text().trim() ||
-    $('b:contains("Prediction")').parent().text().trim();
-  const scoreText = ($("strong")
-    .filter((_, el) => /\d+\s*-\s*\d+/.test($(el).text()))
-    .first()
-    .text()
-    .trim()) || "";
-  const picks = [];
-  if (predictionText) picks.push(textClean(predictionText));
-  if (scoreText) picks.push(`Score: ${scoreText}`);
+  let prediction = "";
+
+  // încercăm să găsim „Prediction” sau prima frază cu scor/rezultat
+  const strongPred = $('strong:contains("Prediction")').parent().text();
+  const bPred = $('b:contains("Prediction")').parent().text();
+  const raw = t(strongPred || bPred);
+  if (raw) prediction = raw;
+
+  if (!prediction) {
+    const body = t($("body").text());
+    const m = body.match(/Prediction\s*:\s*([^\n]+)$/im);
+    if (m) prediction = t(m[1]);
+  }
+
   return {
     source: "PredictZ",
     url,
     title,
     synopsis: metaDesc,
-    picks,
-    prediction: predictionText ? textClean(predictionText) : "",
-    date: "",
-    teams: null,
+    prediction: t(prediction),
   };
 }
 
 function parseForebet(html, url) {
   const $ = cheerio.load(html);
-  const title = $("h1").first().text().trim() || $("title").text().trim();
-  const prediction =
-    $("td:contains('Prediction')").first().next().text().trim() ||
-    $("div.prediction, span.prediction").first().text().trim();
-  const picks = [];
-  if (prediction) picks.push(textClean(prediction));
-  const odds = [];
-  $("table,div").each((_, el) => {
-    const txt = $(el).text();
-    if (/1X2|odds|cote/i.test(txt) && txt.length > 30) {
-      odds.push(textClean(txt).slice(0, 200));
-    }
-  });
+  const title = t($("h1").first().text()) || t($("title").text());
+  let prediction = "";
+
+  // tabele sau span-uri marcate "Prediction"
+  const tdPred = $("td:contains('Prediction')").first().next().text();
+  const divPred = $("div.prediction, span.prediction").first().text();
+  prediction = t(tdPred || divPred);
+
+  if (!prediction) {
+    const body = t($("body").text());
+    const m = body.match(/Prediction\s*:\s*([^\n]+)$/im);
+    if (m) prediction = t(m[1]);
+  }
+
   return {
     source: "Forebet",
     url,
     title,
-    picks,
-    prediction: prediction ? textClean(prediction) : "",
-    odds,
-    synopsis: "",
-    date: "",
-    teams: null,
+    prediction: t(prediction),
   };
 }
 
-function parseWinDrawWin(html, url) {
-  const $ = cheerio.load(html);
-  const title = $("h1").first().text().trim() || $("title").text().trim();
-  const predictionBlock = $("div:contains('Prediction')").first().text().trim();
-  const picks = [];
-  if (predictionBlock) picks.push(textClean(predictionBlock));
-  const form = [];
-  $("table tr").each((_, tr) => {
-    const row = $(tr).text().replace(/\s+/g, " ").trim();
-    if (/Form/i.test(row)) form.push(row);
-  });
-  return {
-    source: "WinDrawWin",
-    url,
-    title,
-    picks,
-    prediction: predictionBlock ? textClean(predictionBlock) : "",
-    form,
-    synopsis: "",
-    date: "",
-    teams: null,
-  };
-}
-
-// ---------------- Agregator ----------------
-export async function fetchAllSources(slugOrUrl) {
-  const items = buildSourceUrls(slugOrUrl);
-  const results = { sportytrader: null, predictz: null, forebet: null, windrawwin: null };
-
-  for (const it of items) {
+// --------------- Resolve + Parse per source ---------------
+async function resolveAndParse(source, candidates, parser) {
+  for (const url of candidates) {
     try {
-      const html = await getHTML(it.url);
-      let data = null;
-      switch (it.key) {
-        case "sportytrader":
-          data = parseSportyTrader(html, it.url);
-          results.sportytrader = data;
-          break;
-        case "predictz":
-          data = parsePredictZ(html, it.url);
-          results.predictz = data;
-          break;
-        case "forebet":
-          data = parseForebet(html, it.url);
-          results.forebet = data;
-          break;
-        case "windrawwin":
-          data = parseWinDrawWin(html, it.url);
-          results.windrawwin = data;
-          break;
-        default:
-          break;
+      const { html } = await get(url);
+      if (!html || html.length < 2000) continue; // pagini scurte = redirect / 404
+      const data = parser(html, url);
+      // acceptăm doar dacă avem titlu și o predicție sau titlul conține ambele echipe
+      if (data && (data.prediction || (data.title && data.title.length > 3))) {
+        return { ok: true, ...data };
       }
     } catch {
-      // ignorăm sursa care pică; continuăm cu restul
+      // încearcă următorul candidat
     }
   }
-  return results;
+  return { ok: false, error: `No valid page for ${source}` };
+}
+
+// --------------- Handler ---------------
+export default async function handler(req, res) {
+  try {
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+
+    const { homeTeam, awayTeam, urls } = req.body || {};
+    if (!homeTeam || !awayTeam) {
+      res.status(400).json({ error: "homeTeam and awayTeam are required" });
+      return;
+    }
+
+    const h = normalize(homeTeam);
+    const a = normalize(awayTeam);
+
+    // linkuri „site:” (fallback pentru butoane, 0% șanse de 404)
+    const googleLink = (domain) =>
+      `https://www.google.com/search?q=site%3A${encodeURIComponent(domain)}+${encodeURIComponent(h)}+${encodeURIComponent(a)}+pronostic+predictii`;
+
+    // SPORTYTRADER
+    let sporty;
+    if (urls?.sportytrader) {
+      const { html } = await get(urls.sportytrader);
+      sporty = parseSportyTrader(html, urls.sportytrader);
+      sporty.ok = true;
+    } else {
+      sporty = await resolveAndParse(
+        "SportyTrader",
+        sportyCandidates(h, a),
+        parseSportyTrader
+      );
+    }
+    if (!sporty?.url) sporty = { ...sporty, url: googleLink("sportytrader.com") };
+
+    // PREDICTZ
+    let predictz;
+    if (urls?.predictz) {
+      const { html } = await get(urls.predictz);
+      predictz = parsePredictZ(html, urls.predictz);
+      predictz.ok = true;
+    } else {
+      predictz = await resolveAndParse(
+        "PredictZ",
+        predictzCandidates(h, a),
+        parsePredictZ
+      );
+    }
+    if (!predictz?.url) predictz = { ...predictz, url: googleLink("predictz.com") };
+
+    // FOREBET
+    let forebet;
+    if (urls?.forebet) {
+      const { html } = await get(urls.forebet);
+      forebet = parseForebet(html, urls.forebet);
+      forebet.ok = true;
+    } else {
+      forebet = await resolveAndParse(
+        "Forebet",
+        forebetCandidates(h, a),
+        parseForebet
+      );
+    }
+    if (!forebet?.url) forebet = { ...forebet, url: googleLink("forebet.com") };
+
+    res.status(200).json({
+      ok: true,
+      teams: { home: h, away: a },
+      sources: {
+        sportytrader: sporty,
+        predictz,
+        forebet,
+      },
+      links: {
+        sportytrader: sporty?.url || googleLink("sportytrader.com"),
+        predictz: predictz?.url || googleLink("predictz.com"),
+        forebet: forebet?.url || googleLink("forebet.com"),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err?.message || String(err) });
+  }
 }
