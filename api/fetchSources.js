@@ -1,4 +1,7 @@
-// api/fetchSources.js — STRICT PARSER
+// api/fetchSources.js — ÎNLOCUIEȘTE CODUL
+// Citește surse externe (SportyTrader, PredictZ, Forebet, WinDrawWin)
+// și extrage cât mai exact predicțiile. Robust la variații de HTML.
+
 import axios from "axios";
 import * as cheerio from "cheerio";
 
@@ -28,65 +31,98 @@ function buildSourceUrls(slugOrUrl) {
   const slug = String(slugOrUrl).trim().replace(/^\/+|\/+$/g, "");
   return [
     { key: "sportytrader", url: `https://www.sportytrader.com/ro/pronosticuri/${slug}/` },
-    { key: "predictz", url: `https://www.predictz.com/predictions/${slug}/` },
-    { key: "forebet", url: `https://www.forebet.com/en/predictions/${slug}` },
-    { key: "windrawwin", url: `https://www.windrawwin.com/tips/${slug}/` },
+    { key: "predictz",     url: `https://www.predictz.com/predictions/${slug}/` },
+    { key: "forebet",      url: `https://www.forebet.com/en/predictions/${slug}` },
+    { key: "windrawwin",   url: `https://www.windrawwin.com/tips/${slug}/` },
   ];
 }
 
-// ---------- PARSERS STRICTE ----------
+/* =========================
+   Parsere pe fiecare sursă
+   ========================= */
+
 function parseSportyTrader(html, url) {
   const $ = cheerio.load(html);
-  const title = $("h1").first().text().trim() || $("title").text().trim();
+
+  const title = ($("h1").first().text() || $("title").text() || "").trim();
   const metaDesc = $('meta[name="description"]').attr("content") || "";
   const date =
-    $('[itemprop="startDate"]').attr("content") || $("time").first().attr("datetime") || "";
+    $('[itemprop="startDate"]').attr("content") ||
+    $("time").first().attr("datetime") ||
+    "";
 
-  // echipe (heuristic)
+  // Echipe din titlu (heuristic)
   let teams = title.includes(" - ") ? title.split(" - ") : title.split(" vs ");
   teams = teams.map((s) => s.trim());
   const teamsObj = teams.length >= 2 ? { home: teams[0], away: teams[1] } : null;
 
-  // „Puncte cheie …” – listă numerotată
+  // 1) „Puncte cheie” – secțiunea numerotată
   const keyPoints = [];
-  $('[class*="key"], h2:contains("Puncte cheie"), h3:contains("Puncte cheie")')
-    .parent()
-    .find("li")
-    .each((_, li) => {
-      const t = $(li).text().replace(/\s+/g, " ").trim();
-      if (t) keyPoints.push(t);
-    });
-  // fallback: căutăm blocul care conține „Puncte cheie”
-  if (keyPoints.length === 0) {
-    $('*:contains("Puncte cheie")')
-      .parent()
-      .find("li")
-      .each((_, li) => {
-        const t = $(li).text().replace(/\s+/g, " ").trim();
-        if (t) keyPoints.push(t);
+  $(":contains('Puncte cheie')")
+    .filter((_, el) => /Puncte cheie/i.test($(el).text()))
+    .each((_, anchor) => {
+      // după acest heading, luăm lista/box-ul următor
+      let box = $(anchor).parent();
+      // fallback: căutăm următoarele elemente cu numere 1…5/10
+      const texts = [];
+      box.find("*").each((_, e) => {
+        const t = $(e).text().trim();
+        if (/^\d+\s/.test(t) && t.length > 10) texts.push(t.replace(/\s+/g, " "));
       });
-  }
+      if (!texts.length) {
+        // alt fallback: scan global după item-uri numerotate aproape de anchor
+        $(anchor)
+          .nextAll()
+          .slice(0, 10)
+          .each((_, e) => {
+            const t = $(e).text().trim();
+            if (/^\d+\s/.test(t) && t.length > 10) texts.push(t.replace(/\s+/g, " "));
+          });
+      }
+      texts.slice(0, 10).forEach((t) => keyPoints.push(t));
+    });
 
-  // „Pronosticul/Predicția noastră …” – blocul imediat următor
+  // 2) „Pronosticul/Predicția noastră” – text exact
+  // Căutăm heading-uri paragrafe care conțin „Pronosticul nostru” / „Predicția noastră”
   let prediction = "";
-  const predAnchor = $('*:matchesOwn(/Pronosticul nostru|Predic(ț|t)ia noastr(ă|a)|Predic(ț|t)ie/i)')
-    .first()
-    .closest("section,article,div");
-  if (predAnchor && predAnchor.length) {
-    const text = predAnchor.text().replace(/\s+/g, " ").trim();
-    prediction = text;
-  } else {
-    // fallback: căutăm „Predicție:” într-un <strong>/<b>
-    const txt =
-      $('strong:contains("Predic")').first().parent().text().trim() ||
-      $('b:contains("Predic")').first().parent().text().trim();
-    prediction = txt.replace(/\s+/g, " ");
+  const predAnchors = $(":contains('Pronosticul nostru'), :contains('Predicția noastră')")
+    .filter((_, el) => /Pronosticul nostru|Predicția noastră/i.test($(el).text()));
+
+  if (predAnchors.length) {
+    predAnchors.each((_, el) => {
+      // Luăm textul din blocul următor sau din același container
+      const blk =
+        $(el).next().text().trim() ||
+        $(el).parent().next().text().trim() ||
+        $(el).closest("section,article,div").text().trim();
+      if (blk && blk.length > 40 && !prediction) {
+        prediction = blk.replace(/\s+/g, " ");
+      }
+    });
   }
 
-  // picks (scurte) pentru agregare
+  // 3) Căutăm explicit un bloc cu „Predicție:” / „Predicție” lângă un buton/box albastru
+  if (!prediction) {
+    const nearPred = $(":contains('Predicție')")
+      .filter((_, el) => /Predicție/i.test($(el).text()))
+      .first()
+      .closest("section,article,div");
+    if (nearPred && nearPred.length) {
+      const t = nearPred.text().replace(/\s+/g, " ").trim();
+      // extragem propoziția dominantă
+      const m = t.match(/Predic(ție|tia)[^:]*:\s*([^.]+)\.?/i);
+      if (m && m[2]) prediction = m[2].trim();
+    }
+  }
+
+  // 4) Fallback general pentru „picks”: blocuri care menționează pronostic/pont/pariuri
   const picks = [];
-  if (prediction) picks.push(prediction);
-  if (metaDesc) picks.push(metaDesc);
+  $("section,div,article").each((_, el) => {
+    const t = $(el).text().trim();
+    if (/pronostic|predict(i|ii)e|pont|pariuri/i.test(t) && t.length > 100) {
+      picks.push(t.replace(/\s+/g, " ").slice(0, 400));
+    }
+  });
 
   return {
     source: "SportyTrader",
@@ -94,16 +130,16 @@ function parseSportyTrader(html, url) {
     title,
     date,
     teams: teamsObj,
-    keyPoints,
-    prediction, // text brut – îl interpretăm în chat.js
-    picks,
     synopsis: metaDesc,
+    keyPoints,
+    prediction, // <- textul exact („Câștigă Millwall sau egal” etc.)
+    picks,
   };
 }
 
 function parsePredictZ(html, url) {
   const $ = cheerio.load(html);
-  const title = $("h1").first().text().trim() || $("title").text().trim();
+  const title = ($("h1").first().text() || $("title").text() || "").trim();
   const metaDesc = $('meta[name="description"]').attr("content") || "";
 
   const predictionText =
@@ -112,7 +148,7 @@ function parsePredictZ(html, url) {
 
   const scoreText =
     $("strong")
-      .filter((_, el) => /\b\d+\s*-\s*\d+\b/.test($(el).text()))
+      .filter((_, el) => /\d+\s*-\s*\d+/.test($(el).text()))
       .first()
       .text()
       .trim() || "";
@@ -128,28 +164,29 @@ function parsePredictZ(html, url) {
     synopsis: metaDesc,
     picks,
     prediction: predictionText || "",
-    score: scoreText || "",
+    date: "",
+    teams: null,
   };
 }
 
 function parseForebet(html, url) {
   const $ = cheerio.load(html);
-  const title = $("h1").first().text().trim() || $("title").text().trim();
+  const title = ($("h1").first().text() || $("title").text() || "").trim();
 
   const prediction =
     $('td:contains("Prediction")').first().next().text().trim() ||
     $("div.prediction, span.prediction").first().text().trim();
 
+  const picks = [];
+  if (prediction) picks.push(prediction.replace(/\s+/g, " "));
+
   const odds = [];
   $("table,div").each((_, el) => {
     const txt = $(el).text();
     if (/1X2|odds|cote/i.test(txt) && txt.length > 30) {
-      odds.push(txt.replace(/\s+/g, " ").trim().slice(0, 240));
+      odds.push(txt.replace(/\s+/g, " ").trim().slice(0, 200));
     }
   });
-
-  const picks = [];
-  if (prediction) picks.push(prediction.replace(/\s+/g, " "));
 
   return {
     source: "Forebet",
@@ -158,16 +195,19 @@ function parseForebet(html, url) {
     picks,
     odds,
     prediction: prediction || "",
+    synopsis: "",
+    date: "",
+    teams: null,
   };
 }
 
 function parseWinDrawWin(html, url) {
   const $ = cheerio.load(html);
-  const title = $("h1").first().text().trim() || $("title").text().trim();
+  const title = ($("h1").first().text() || $("title").text() || "").trim();
 
-  const block = $('div:contains("Prediction")').first().text().trim();
+  const predictionBlock = $('div:contains("Prediction")').first().text().trim();
   const picks = [];
-  if (block) picks.push(block.replace(/\s+/g, " "));
+  if (predictionBlock) picks.push(predictionBlock.replace(/\s+/g, " "));
 
   const form = [];
   $("table tr").each((_, tr) => {
@@ -181,13 +221,26 @@ function parseWinDrawWin(html, url) {
     title,
     picks,
     form,
-    prediction: block || "",
+    prediction: predictionBlock || "",
+    synopsis: "",
+    date: "",
+    teams: null,
   };
 }
 
+/* =========================
+   Agregator
+   ========================= */
+
 export async function fetchAllSources(slugOrUrl) {
   const items = buildSourceUrls(slugOrUrl);
-  const results = { sportytrader: null, predictz: null, forebet: null, windrawwin: null };
+
+  const results = {
+    sportytrader: null,
+    predictz: null,
+    forebet: null,
+    windrawwin: null,
+  };
 
   for (const it of items) {
     try {
@@ -207,8 +260,9 @@ export async function fetchAllSources(slugOrUrl) {
           break;
       }
     } catch {
-      // lăsăm null dacă eșuează
+      // ignorăm individual; continuăm cu ce avem
     }
   }
+
   return results;
 }
