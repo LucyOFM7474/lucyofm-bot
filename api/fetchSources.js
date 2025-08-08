@@ -1,64 +1,146 @@
-// Runtime Node 18 pentru Vercel
-export const config = { runtime: "nodejs18.x" };
+// ÎNLOCUIEȘTE CODUL – api/fetchSources.js
+import axios from 'axios';
+import * as cheerio from 'cheerio';
 
-/**
- * API: GET /api/fetchSources?match=Rapid%20-%20FCSB
- * Răspuns: { sportytrader, forebet, predictz }
- *
- * Nu face scraping. Doar construiește linkuri directe către paginile de predicții.
- */
+const SCRAPER_KEY = process.env.SCRAPER_API_KEY || ''; // cheia ScraperAPI din Vercel
+const TIMEOUT = 25000;
 
-function allowCors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-}
+// --- 1) Helper: ia HTML (cu sau fără ScraperAPI) ---
+async function getHTML(url) {
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    'Accept-Language': 'ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7',
+  };
 
-function slugify(ro) {
-  if (!ro) return "";
-  const s = String(ro)
-    .toLowerCase()
-    .replace(/\s*-\s*/g, "-")
-    .replace(/\s+/g, "-")
-    .replace(/ă/g, "a")
-    .replace(/â/g, "a")
-    .replace(/î/g, "i")
-    .replace(/ș/g, "s")
-    .replace(/ţ/g, "t")
-    .replace(/ț/g, "t")
-    .replace(/[^a-z0-9\-]/g, "")
-    .replace(/\-+/g, "-")
-    .replace(/^\-|\-$/g, "");
-  return s;
-}
-
-export default async function handler(req, res) {
-  try {
-    allowCors(res);
-
-    if (req.method === "OPTIONS") {
-      return res.status(204).end();
-    }
-
-    if (req.method !== "GET") {
-      return res.status(405).json({ error: "Method Not Allowed. Use GET." });
-    }
-
-    const match = String(req.query?.match || "").trim();
-    if (!match) {
-      return res.status(400).json({ error: "Parametrul 'match' este obligatoriu (ex: Rapid – FCSB)." });
-    }
-
-    const formatted = slugify(match);
-
-    const links = {
-      sportytrader: `https://www.sportytrader.com/ro/pronosticuri/${formatted}/`,
-      forebet: `https://www.forebet.com/ro/predictii-pentru-${formatted}`,
-      predictz: `https://www.predictz.com/predictions/${formatted}/`
-    };
-
-    return res.status(200).json(links);
-  } catch (err) {
-    return res.status(500).json({ error: String(err?.message || err || "Eroare necunoscută") });
+  if (SCRAPER_KEY) {
+    const apiUrl = `https://api.scraperapi.com?api_key=${SCRAPER_KEY}&url=${encodeURIComponent(url)}&keep_headers=true`;
+    const { data } = await axios.get(apiUrl, { timeout: TIMEOUT, headers });
+    return typeof data === 'string' ? data : String(data || '');
   }
+
+  const { data } = await axios.get(url, { timeout: TIMEOUT, headers });
+  return typeof data === 'string' ? data : String(data || '');
+}
+
+// --- 2) Construiește linkuri către surse ---
+function buildSourceUrls(slugOrUrl) {
+  if (/^https?:\/\//i.test(slugOrUrl)) {
+    return [{ key: 'sportytrader', url: slugOrUrl }];
+  }
+  const slug = String(slugOrUrl).trim().replace(/^\/+|\/+$/g, '');
+  return [
+    { key: 'sportytrader', url: `https://www.sportytrader.com/ro/pronosticuri/${slug}/` },
+    { key: 'predictz',     url: `https://www.predictz.com/predictions/${slug}/` },
+    { key: 'forebet',      url: `https://www.forebet.com/en/predictions/${slug}` },
+    { key: 'windrawwin',   url: `https://www.windrawwin.com/tips/${slug}/` },
+  ];
+}
+
+// --- 3) Parsere pentru fiecare sursă ---
+function parseSportyTrader(html, url) {
+  const $ = cheerio.load(html);
+  const title = $('h1').first().text().trim() || $('title').text().trim();
+  const metaDesc = $('meta[name="description"]').attr('content') || '';
+  const date = $('[itemprop="startDate"]').attr('content') || $('time').first().attr('datetime') || '';
+
+  let teams = title.includes(' - ') ? title.split(' - ') : title.split(' vs ');
+  teams = teams.map(s => s.trim());
+  const teamsObj = teams.length >= 2 ? { home: teams[0], away: teams[1] } : null;
+
+  const picks = [];
+  $('section,div,article').each((_, el) => {
+    const t = $(el).text().trim();
+    if (/pronostic|predict(i|ii)e|pont|pariuri/i.test(t) && t.length > 80) {
+      picks.push(t.replace(/\s+/g, ' ').slice(0, 400));
+    }
+  });
+
+  return { source: 'SportyTrader', url, title, date, teams: teamsObj, synopsis: metaDesc, picks };
+}
+
+function parsePredictZ(html, url) {
+  const $ = cheerio.load(html);
+  const title = $('h1').first().text().trim() || $('title').text().trim();
+  const metaDesc = $('meta[name="description"]').attr('content') || '';
+
+  const predictionText =
+    $('strong:contains("Prediction")').parent().text().trim() ||
+    $('b:contains("Prediction")').parent().text().trim();
+
+  const scoreText = ($('strong').filter((_, el) => /\d+\s*-\s*\d+/.test($(el).text())).first().text().trim()) || '';
+
+  const picks = [];
+  if (predictionText) picks.push(predictionText.replace(/\s+/g, ' '));
+  if (scoreText) picks.push(`Score: ${scoreText}`);
+
+  return { source: 'PredictZ', url, title, synopsis: metaDesc, picks, date: '', teams: null };
+}
+
+function parseForebet(html, url) {
+  const $ = cheerio.load(html);
+  const title = $('h1').first().text().trim() || $('title').text().trim();
+
+  const prediction =
+    $('td:contains("Prediction")').first().next().text().trim() ||
+    $('div.prediction, span.prediction').first().text().trim();
+
+  const picks = [];
+  if (prediction) picks.push(prediction.replace(/\s+/g, ' '));
+
+  const odds = [];
+  $('table,div').each((_, el) => {
+    const txt = $(el).text();
+    if (/1X2|odds|cote/i.test(txt) && txt.length > 30) {
+      odds.push(txt.replace(/\s+/g, ' ').trim().slice(0, 200));
+    }
+  });
+
+  return { source: 'Forebet', url, title, picks, odds, synopsis: '', date: '', teams: null };
+}
+
+function parseWinDrawWin(html, url) {
+  const $ = cheerio.load(html);
+  const title = $('h1').first().text().trim() || $('title').text().trim();
+
+  const predictionBlock = $('div:contains("Prediction")').first().text().trim();
+  const picks = [];
+  if (predictionBlock) picks.push(predictionBlock.replace(/\s+/g, ' '));
+
+  const form = [];
+  $('table tr').each((_, tr) => {
+    const row = $(tr).text().replace(/\s+/g, ' ').trim();
+    if (/Form/i.test(row)) form.push(row);
+  });
+
+  return { source: 'WinDrawWin', url, title, picks, form, synopsis: '', date: '', teams: null };
+}
+
+// --- 4) Agregator ---
+export async function fetchAllSources(slugOrUrl) {
+  const items = buildSourceUrls(slugOrUrl);
+
+  const results = {
+    sportytrader: null,
+    predictz: null,
+    forebet: null,
+    windrawwin: null,
+  };
+
+  for (const it of items) {
+    try {
+      const html = await getHTML(it.url);
+      let data = null;
+      switch (it.key) {
+        case 'sportytrader': data = parseSportyTrader(html, it.url); results.sportytrader = data; break;
+        case 'predictz': data = parsePredictZ(html, it.url); results.predictz = data; break;
+        case 'forebet': data = parseForebet(html, it.url); results.forebet = data; break;
+        case 'windrawwin': data = parseWinDrawWin(html, it.url); results.windrawwin = data; break;
+        default: break;
+      }
+    } catch (e) {
+      // dacă o sursă pică, o să o ignore și continuă cu restul
+    }
+  }
+
+  return results;
 }
