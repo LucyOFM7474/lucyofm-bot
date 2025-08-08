@@ -1,33 +1,128 @@
-:root { --bg:#0b0f14; --card:#131922; --text:#eef2f8; --muted:#9fb0c1; --pri:#4aa3ff; }
+/* public/style.css — Layout robust și card de rezultat full-width */
+
+/* Reset de bază */
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
-  margin: 0; font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  background: var(--bg); color: var(--text);
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  background: #0f172a; /* fundal închis */
+  color: #e2e8f0;      /* text deschis */
 }
-.top { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #1b2431; }
-.top h1 { margin:0; font-size:20px; }
-.badge { background:#0f253d; color:#cfe6ff; padding:6px 10px; border-radius:12px; font-size:12px; }
-.wrap { max-width: 900px; margin: 24px auto; padding: 0 14px; }
-.card {
-  background: var(--card); border:1px solid #1b2431; border-radius:14px; padding:16px; margin-bottom:16px;
-  box-shadow: 0 10px 24px rgba(0,0,0,.25);
-}
-label { display:block; margin:6px 0; color: var(--muted); font-size:13px; }
-input[type="text"], input[type="date"] {
-  width:100%; padding:10px 12px; border-radius:10px; border:1px solid #243145; background:#0e141d; color:var(--text);
-}
-.row { display:flex; gap:12px; align-items:flex-end; margin-top:12px; }
-.col { flex:1; }
-button {
-  width:100%; padding:12px; border:0; border-radius:10px; background:var(--pri); color:#00162b; font-weight:700; cursor:pointer;
-}
-button:disabled { opacity:.6; cursor:not-allowed; }
-.hint { color: var(--muted); display:block; margin-top:8px; }
 
-.status { margin: 4px 0 10px; color:#cfe6ff; }
-.output {
-  white-space: pre-wrap; background:#0e141d; border:1px solid #243145; border-radius:10px; padding:12px; min-height: 220px;
+/* Container general */
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px 16px 80px;
 }
-.feedback { display:flex; gap:10px; margin-top:10px; }
-.foot { text-align:center; color:#6f8196; padding:18px 0 28px; font-size:12px; }
+
+/* Titlu */
+h1, h2, h3 {
+  margin: 0 0 12px;
+  line-height: 1.25;
+}
+
+/* Card generice */
+.card {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  padding: 16px;
+  width: 100%;
+}
+
+/* Formularul de meci + butoane */
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.input, input, textarea, select, button {
+  font: inherit;
+}
+
+.input, input, select, textarea {
+  background: #0b1220;
+  color: #e5e7eb;
+  border: 1px solid #273244;
+  border-radius: 12px;
+  padding: 10px 12px;
+  outline: none;
+  width: 100%;
+}
+
+button {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+button:hover { filter: brightness(1.05); }
+
+/* ===== Rezultat (REPARAT) ===== */
+#result, .result, .analysis-output {
+  width: 100%;
+}
+
+.result-card {
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+/* Blocul de text rezultat */
+.result-content, .result pre, .result .content, pre#analysis, pre.analysis {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 16px;
+  background: #0b1220;
+  border: 1px solid #273244;
+  border-radius: 14px;
+
+  /* Cheia pentru „căsuța îngustă” */
+  white-space: pre-wrap;       /* păstrează line-break-urile, dar rupe liniile lungi */
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* Badge-uri / etichete */
+.badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  border: 1px solid transparent;
+}
+.badge.good { background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.35); color: #86efac; }
+.badge.warn { background: rgba(234,179,8,.12); border-color: rgba(234,179,8,.35); color: #fde68a; }
+.badge.bad  { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.35); color: #fca5a5; }
+
+/* Footer „Model / status” */
+.meta {
+  margin-top: 10px;
+  opacity: .8;
+  font-size: .85rem;
+}
+
+/* Responsiv */
+@media (max-width: 640px) {
+  .container { padding: 12px; }
+  .form-row { gap: 8px; }
+  .result-content, .result pre, .result .content, pre#analysis, pre.analysis {
+    font-size: 0.98rem;
+    padding: 14px;
+  }
+}
