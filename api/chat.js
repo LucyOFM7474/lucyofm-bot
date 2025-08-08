@@ -1,15 +1,14 @@
-// api/chat.js — ÎNLOCUIEȘTE CODUL
-// Serverless (Vercel). Primește { match: "Gazdă - Oaspeți" SAU slug/link }, citește surse,
-// apoi cere modelului GPT să livreze analiza în 10 puncte pe stilul stabilit de Florin.
+// api/chat.js — versiune corectă fără runtime config, compatibilă cu Vercel
+// Primește { match: "Gazdă - Oaspeți" SAU slug/link }, citește surse,
+// apoi cere modelului GPT analiza în 10 puncte pe stilul stabilit.
 
 import OpenAI from "openai";
 import { fetchAllSources } from "./fetchSources.js";
 
-// ---------- CONFIG ----------
-const MODEL = process.env.OPENAI_MODEL || "gpt-5"; // fallback: gpt-5 (sau schimbă în gpt-4o dacă preferi)
+const MODEL = process.env.OPENAI_MODEL || "gpt-5";
 const TIMEOUT_MS = 60000;
 
-// Mic utilitar de timeout pentru orice promisiune
+// Helper timeout
 const withTimeout = (p, ms, label = "operation") =>
   Promise.race([
     p,
@@ -18,7 +17,7 @@ const withTimeout = (p, ms, label = "operation") =>
     ),
   ]);
 
-// Normalizează textul (scapă de spații duble, linii foarte lungi)
+// Curățare text
 function clean(t) {
   return String(t || "")
     .replace(/\r/g, "")
@@ -28,15 +27,13 @@ function clean(t) {
     .trim();
 }
 
-// Construiește promptul pentru GPT (stil Florin – 10 puncte, surse, build-up)
+// Construiește promptul pentru GPT
 function buildPrompt({ userMatch, sources }) {
-  // Extragem rapid din surse ce avem
   const ST = sources?.sportytrader || null;
   const PZ = sources?.predictz || null;
   const FB = sources?.forebet || null;
   const WDW = sources?.windrawwin || null;
 
-  // „Baza factuală” (nu e listă pentru utilizator; e context pentru model)
   const context = {
     sportytrader: {
       title: ST?.title || "",
@@ -68,34 +65,31 @@ function buildPrompt({ userMatch, sources }) {
 
   const ctxString = "SURSE_BRUTE_JSON:\n" + JSON.stringify(context, null, 2);
 
-  // Instrucțiuni stricte de format (stilul tău Grok4 personalizat)
   const rules = `
-Ești un asistent care livrează EXCLUSIV analiză fotbal în 10 puncte, în română, format compact, fără caractere asiatice.
+Ești un asistent care livrează exclusiv analiză fotbal în 10 puncte, în română, format compact, fără caractere asiatice.
 Folosește simboluri: ✅ consens, ⚠️ parțial, 📊 statistici, 🎯 recomandări.
 
-1) "Surse & Predicții": compară SportyTrader / PredictZ / Forebet / WinDrawWin. Marchează consensul cu ✅, opiniile parțiale cu ⚠️. Citează pe scurt sursa între paranteze pătrate. Exemplu: "✅ SportyTrader (victorie gazde), ⚠️ Forebet (echilibrat)".
-2) "Medie ponderată a predicțiilor": explică tendința generală (ex: avantaj oaspeți).
-3) "Consens 1X2%": procent orientativ pe 1 / X / 2 bazat pe ce au spus sursele (fără a inventa cote exacte).
-4) "Consens Over/Under%": estimare (ex: Over 2.5 probabil).
-5) "Impact formă & absențe": folosește orice indicii din context; dacă nu există, spune "date insuficiente".
-6) "Golgheteri & penalty-uri": dacă lipsesc date, menționează explicit că nu sunt disponibile.
-7) "📊 Posesie, cornere, galbene, faulturi": dacă nu există date brute, marchează "în lucru". Nu inventa cifre!
-8) "Tendințe ultimele 5 meciuri": rezumă forma (ex: 4/5 în formă bună).
-9) "🎯 Recomandări de jucat": 3–5 selecții clare, fiecare pe linie: 1X2 / Over/Under / BTTS / Cornere, etc. 
-   • include build-up-ul: "Solist sigur (1.4–1.6)", "Valoare ascunsă (1.7–2.0)", "Surpriză controlată (2.1–2.4)". 
-   • Dacă nu ai cote, lasă tipul fără cotă exactă, dar păstrează etichetele.
-10) "Note & verificări": atenționează la absențe de ultim moment / meteo / motivații.
+1) "Surse & Predicții": compară SportyTrader / PredictZ / Forebet / WinDrawWin. Marchează consensul cu ✅, opiniile parțiale cu ⚠️.
+2) "Medie ponderată a predicțiilor": explică tendința generală.
+3) "Consens 1X2%": procent orientativ pe 1 / X / 2.
+4) "Consens Over/Under%": estimare generală.
+5) "Impact formă & absențe": dacă lipsesc date, spune "date insuficiente".
+6) "Golgheteri & penalty-uri": dacă lipsesc date, spune explicit.
+7) "📊 Posesie, cornere, galbene, faulturi": dacă lipsesc date, marchează "în lucru".
+8) "Tendințe ultimele 5 meciuri": rezumă forma.
+9) "🎯 Recomandări de jucat": 3–5 selecții clare (1X2 / Over/Under / BTTS / Cornere etc.) cu etichetele "Solist sigur", "Valoare ascunsă", "Surpriză controlată".
+10) "Note & verificări": atenționează la absențe/meteo/motivații.
 
 Reguli:
 - Fără paragrafe lungi; liste numerotate 1→10.
-- Evită generalitățile; leagă concluziile de surse.
-- NU inventa statistici sau jucători. Când nu există date, spune scurt "date indisponibile" sau "în lucru".
-- Păstrează ton profesionist, direct, compact.
+- Leagă concluziile de surse.
+- Nu inventa statistici; dacă lipsesc, marchează.
+- Ton profesionist, direct, compact.
 `;
 
   const userTask = `
 Meci: ${userMatch}
-Furnizez mai jos conținutul extras din surse. Folosește-le pentru sinteză, apoi dă analiza în 10 puncte pe formatul de mai sus.
+Furnizez mai jos conținutul extras din surse. Folosește-le pentru sinteză și dă analiza în 10 puncte.
 
 ${ctxString}
   `.trim();
@@ -103,7 +97,7 @@ ${ctxString}
   return { system: rules.trim(), user: userTask };
 }
 
-// Răspuns JSON standard pentru frontend
+// Răspuns JSON standard
 function ok(res, payload) {
   res.status(200).json({ ok: true, ...payload });
 }
@@ -125,16 +119,15 @@ export default async function handler(req, res) {
     const match = clean(body.match || body.meci || body.query || "");
     if (!match) return fail(res, 400, "Parametrul 'match' este obligatoriu");
 
-    // 1) Citește surse (SportyTrader, PredictZ, Forebet, WinDrawWin) prin fetchSources.js
+    // 1) Citește sursele externe
     let sources = {};
     try {
       sources = await withTimeout(fetchAllSources(match), TIMEOUT_MS, "fetchAllSources");
-    } catch (e) {
-      // dacă pică sursele, mergem doar cu GPT (dar semnalăm „date limitate”)
+    } catch {
       sources = {};
     }
 
-    // 2) Construiește promptul strict pe formatul Florin (10 puncte + simboluri)
+    // 2) Construiește promptul
     const { system, user } = buildPrompt({ userMatch: match, sources });
 
     const client = new OpenAI({ apiKey });
@@ -157,7 +150,7 @@ export default async function handler(req, res) {
       completion?.choices?.[0]?.message?.content?.trim() ||
       "Nu am reușit să generez analiza.";
 
-    // 4) Răspuns către UI — includ și sursele brute ca să le poți afișa / debuga
+    // 4) Trimite răspunsul la UI
     return ok(res, {
       model: MODEL,
       match,
