@@ -1,145 +1,121 @@
-<script>
-(() => {
-  const $ = (sel) => document.querySelector(sel);
+// public/script.js
 
-  function setText(el, html){ if(el) el.innerHTML = html; }
-  function sanitize(s){ return String(s||"").replace(/\r/g,"").replace(/[ \t]+\n/g,"\n").replace(/\n{3,}/g,"\n\n").trim(); }
-  function makeEl(tag, attrs={}, text=""){ const el=document.createElement(tag);
-    Object.entries(attrs).forEach(([k,v])=>{
-      if(k==="class") el.className=v;
-      else if(k.startsWith("on") && typeof v==="function") el.addEventListener(k.slice(2),v);
-      else if(v!=null) el.setAttribute(k,v);
-    }); if(text) el.textContent=text; return el; }
-
-  const input = $("#matchInput");
-  const genBtn = $("#generateBtn");
-  const resultBox = $("#result");
-  const srcBtnsWrap = $("#sourceButtons");
-  const srcSummaryWrap = $("#sourceSummary");
-
-  function loading(on=true){
-    if(!genBtn) return; genBtn.disabled=!!on;
-    genBtn.textContent = on ? "Se generează..." : "Generează analiza";
+// Helper pentru a găsi elemente indiferent de id-urile folosite în versiuni anterioare
+function $(ids) {
+  if (typeof ids === "string") ids = [ids];
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (el) return el;
   }
-  function toast(msg,type="info"){
-    const box=makeEl("div",{class:`fixed-toast ${type}`},msg);
-    document.body.appendChild(box); setTimeout(()=>box.remove(),3000);
-  }
+  return null;
+}
 
-  // =============== API ===============
-  async function requestAnalysis(match){
-    const res = await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({match})});
-    if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e?.error||`Eroare ${res.status}`); }
-    return res.json();
-  }
+const els = {
+  form: $("matchForm"),
+  home: $("homeTeam"),
+  away: $("awayTeam"),
+  // câmpuri opționale pentru URL-uri directe (dacă utilizatorul le are)
+  urlSporty: $("urlSportyTrader"),
+  urlPredictz: $("urlPredictZ"),
+  urlForebet: $("urlForebet"),
 
-  // =============== Render ===============
-  function renderOpenButtons(sources){
-    if(!srcBtnsWrap) return; srcBtnsWrap.innerHTML="";
-    const map = [
-      ["SportyTrader", sources?.sportytrader?.url],
-      ["Forebet", sources?.forebet?.url],
-      ["PredictZ", sources?.predictz?.url],
-      ["WinDrawWin", sources?.windrawwin?.url],
-    ];
-    map.forEach(([label,url])=>{
-      const b=makeEl("button",{class:"btn"},`Deschide ${label}`); b.disabled=!url;
-      b.addEventListener("click",()=>url&&open(url,"_blank")); srcBtnsWrap.appendChild(b);
-    });
-  }
-  function summarizeSources(s){
-    const badges=[];
-    if(s?.sportytrader?.picks?.length) badges.push("✅ SportyTrader");
-    else if(s?.sportytrader) badges.push("⚠️ SportyTrader");
-    if(s?.predictz?.picks?.length) badges.push("✅ PredictZ");
-    else if(s?.predictz) badges.push("⚠️ PredictZ");
-    if(s?.forebet?.picks?.length || s?.forebet?.odds?.length) badges.push("✅ Forebet");
-    else if(s?.forebet) badges.push("⚠️ Forebet");
-    if(s?.windrawwin?.picks?.length || s?.windrawwin?.form?.length) badges.push("✅ WinDrawWin");
-    else if(s?.windrawwin) badges.push("⚠️ WinDrawWin");
-    return badges.length ? "📎 Surse: " + badges.join(" · ") : "📎 Surse: date indisponibile.";
-  }
-  function renderSourceSummary(sources){ setText(srcSummaryWrap, `<div class="muted small">${summarizeSources(sources)}</div>`); }
+  // butoane/linkuri către surse
+  btnSporty: $("linkSportyTrader") || $("btnSportyTrader"),
+  btnPredictz: $("linkPredictZ") || $("btnPredictZ"),
+  btnForebet: $("linkForebet") || $("btnForebet"),
 
-  function renderAnalysis(text){
-    if(!resultBox) return;
-    const safe = sanitize(text).replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    const html = safe.split("\n").map(ln=>{
-      if(/^\s*\d+\)/.test(ln)){
-        const idx = ln.indexOf(")");
-        const head = ln.slice(0, idx+1);
-        const rest = ln.slice(idx+1);
-        return `<div><strong>${head}</strong>${rest}</div>`;
-      }
-      return `<div>${ln}</div>`;
-    }).join("");
-    resultBox.innerHTML = `<div class="analysis">${html}</div>`;
-    // colorăm rapid simbolurile
-    resultBox.querySelectorAll("div").forEach(d=>{
-      d.innerHTML = d.innerHTML
-        .replaceAll("✅","<span class='ok'>✅</span>")
-        .replaceAll("⚠️","<span class='warn'>⚠️</span>")
-        .replaceAll("📊","<span class='stat'>📊</span>")
-        .replaceAll("🎯","<span class='reco'>🎯</span>");
-    });
+  // caseta unde arătăm ce au zis sursele
+  sourcesBox: $("sourcesBox") || $("sources"),
+};
+
+function setHref(a, href) {
+  if (!a) return;
+  try {
+    a.setAttribute("href", href);
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener");
+  } catch {}
+}
+
+function renderSources(s) {
+  if (!els.sourcesBox) return;
+
+  const lines = [];
+
+  if (s?.sportytrader) {
+    const p = s.sportytrader.prediction ? ` — ${s.sportytrader.prediction}` : "";
+    lines.push(`✅ SportyTrader${p}`);
+  } else {
+    lines.push(`⚠️ SportyTrader: indisponibil`);
   }
 
-  async function onGenerate(){
-    const match = sanitize(input?.value||"");
-    if(!match){ toast("Scrie meciul în format „Gazdă - Oaspeți” sau slug/link.","error"); input?.focus(); return; }
-    try{
-      loading(true); setText(resultBox,""); setText(srcSummaryWrap,""); if(srcBtnsWrap) srcBtnsWrap.innerHTML="";
-      const data = await requestAnalysis(match);
-      renderAnalysis(data?.analysis || "Nu am reușit să generez analiza.");
-      renderOpenButtons(data?.sources); renderSourceSummary(data?.sources);
-    }catch(e){ toast(e.message||"Eroare la generare","error"); }
-    finally{ loading(false); }
+  if (s?.predictz) {
+    const p = s.predictz.prediction ? ` — ${s.predictz.prediction}` : "";
+    lines.push(`📊 PredictZ${p}`);
+  } else {
+    lines.push(`⚠️ PredictZ: indisponibil`);
   }
 
-  genBtn?.addEventListener("click", onGenerate);
-  input?.addEventListener("keydown", ev=>{ if(ev.key==="Enter") onGenerate(); });
+  if (s?.forebet) {
+    const p = s.forebet.prediction ? ` — ${s.forebet.prediction}` : "";
+    lines.push(`📊 Forebet${p}`);
+  } else {
+    lines.push(`⚠️ Forebet: indisponibil`);
+  }
 
-  // =============== Setări + Demo ===============
-  const settings = $("#settingsModal");
-  $("#openSettings")?.addEventListener("click",()=>{ settings?.classList.remove("hidden"); settings?.setAttribute("aria-hidden","false"); });
-  $("#closeSettings")?.addEventListener("click",()=>{ settings?.classList.add("hidden"); settings?.setAttribute("aria-hidden","true"); });
+  els.sourcesBox.textContent = lines.join("\n");
+}
 
-  const DEMO = [
-"Analiză „marca ta” – Club Brugge vs Cercle Brugge (9 august 2025)",
-"",
-"1) ✅ Consens general – Toate sursele majore văd victorie Club Brugge, cote ~1.40, probabilitate estimată 70–72% pentru succes.",
-"",
-"2) 🧮 Scor estimat – Majoritatea previziunilor merg pe 2–0 pentru Club Brugge, bazat pe forma bună și problemele ofensive ale lui Cercle.",
-"",
-"3) 📊 Over 2.5 goluri – Analizele SportyTrader și Betimate indică un meci deschis, cu peste 2,5 goluri în total.",
-"",
-"4) 📊 Cornere – Media recentă: Brugge ~5,5/meci, Cercle ~4/meci. Recomandare APWin – Sub 9,5 cornere.",
-"",
-"5) ✅ Pauză – Club Brugge conduce – În ultimele 5 meciuri directe, Brugge a condus la pauză în 4 dintre ele.",
-"",
-"6) 📊 H2H – Ultimele 16 dueluri: 8 victorii Brugge, 7 egaluri, 1 victorie Cercle. BTTS în 56% din cazuri.",
-"",
-"7) 📊 Formă recentă – Club Brugge: 4 victorii din 6 meciuri, medie de 1,67 goluri marcate și 0,83 primite. Cercle: fără gol în primele 2 etape.",
-"",
-"8) 📊 Context derby – Se joacă pe Jan Breydel Stadium, unde Brugge este neînvinsă în ultimele 8 derby-uri.",
-"",
-"9) ⚠️ Alternative prudente – Există și scenarii cu Under 2,5 goluri și „Ambele nu marchează” – pentru pariori conservatori.",
-"",
-"10) 🎯 Concluzie finală – Tricombo recomandat:",
-"    ° Rezultat: Club Brugge victorie",
-"    ° Goluri: Peste 2,5",
-"    ° Cornere: Sub 9,5",
-"    ° Pauză: Brugge conduce"
-].join("\n");
-
-  $("#demoBtn")?.addEventListener("click", ()=>{
-    renderAnalysis(DEMO);
-    setText(srcSummaryWrap, `<div class="muted small">📎 Surse: exemplu vizual (format standard). Pentru date live apasă „Generează analiza”.</div>`);
-    settings?.classList.add("hidden");
+async function fetchSources(payload) {
+  const res = await fetch("/api/fetchSources", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
 
-  // URL ?m= pre-complete
-  const q = new URLSearchParams(location.search).get("m");
-  if(q && input){ input.value=q; setTimeout(onGenerate,100); }
+async function onSubmit(e) {
+  e?.preventDefault?.();
+
+  const homeTeam = (els.home?.value || "").trim();
+  const awayTeam = (els.away?.value || "").trim();
+
+  if (!homeTeam || !awayTeam) {
+    alert("Completează echipele (acasă și deplasare).");
+    return;
+  }
+
+  const urls = {};
+  if (els.urlSporty?.value) urls.sportytrader = els.urlSporty.value.trim();
+  if (els.urlPredictz?.value) urls.predictz = els.urlPredictz.value.trim();
+  if (els.urlForebet?.value) urls.forebet = els.urlForebet.value.trim();
+
+  try {
+    const data = await fetchSources({ homeTeam, awayTeam, urls });
+
+    // Setăm link-urile butoanelor (fără 404; au fallback pe căutare „site:”)
+    setHref(els.btnSporty, data?.links?.sportytrader);
+    setHref(els.btnPredictz, data?.links?.predictz);
+    setHref(els.btnForebet, data?.links?.forebet);
+
+    // Afișăm ce au zis sursele, exact cum scrie pe site
+    renderSources(data?.sources);
+
+    // (opțional) trigger pentru analiza extinsă, dacă ai un buton separat
+    // startFullAnalysis({ homeTeam, awayTeam, sources: data?.sources });
+
+  } catch (err) {
+    console.error(err);
+    alert("Nu am putut citi sursele. Încearcă din nou sau adaugă URL-urile directe.");
+  }
+}
+
+// Inițializare
+(() => {
+  if (els.form) els.form.addEventListener("submit", onSubmit);
+  // Dacă ai buton „Caută”, atașează-l aici:
+  const btn = $("btnFetchSources");
+  if (btn) btn.addEventListener("click", onSubmit);
 })();
-</script>
