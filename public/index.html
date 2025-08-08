@@ -3,77 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LucyOFM – Analize meciuri</title>
-  <meta name="description" content="LucyOFM – Analize meciuri în 10 puncte, cu GPT" />
-  <meta name="theme-color" content="#0b1220" />
+  <title>LucyOFM – Analize Meciuri</title>
   <link rel="manifest" href="/manifest.json" />
-  <link rel="icon" href="/icons/icon-192.png" />
-  <style>
-    :root { --bg:#0b1220; --card:#121a2b; --text:#e9eefb; --muted:#9fb0d0; --accent:#4aa3ff; --danger:#ff5a5a; }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Inter,Helvetica,Arial,sans-serif;
-      background:var(--bg); color:var(--text); line-height:1.45;
-      display:flex; align-items:center; justify-content:center; padding:24px;
-    }
-    .wrap{width:100%; max-width:980px}
-    .card{
-      background:var(--card); border:1px solid rgba(255,255,255,.06);
-      border-radius:16px; padding:20px; box-shadow:0 8px 30px rgba(0,0,0,.35);
-    }
-    h1{margin:0 0 4px 0; font-size:22px; letter-spacing:.3px}
-    .sub{color:var(--muted); margin:0 0 16px 0; font-size:13px}
-    label{display:block; margin:12px 0 6px 0; color:#bcd0f0; font-size:13px}
-    input[type="text"]{
-      width:100%; padding:12px 14px; font-size:15px; color:var(--text);
-      background:#0f1729; border:1px solid rgba(255,255,255,.08); border-radius:10px; outline:none;
-    }
-    input[type="text"]::placeholder{color:#7e8fb0}
-    .row{display:flex; gap:10px; margin-top:12px; flex-wrap:wrap}
-    button{
-      appearance:none; border:none; border-radius:10px; padding:12px 16px; font-size:15px; cursor:pointer;
-      background:var(--accent); color:#041124; font-weight:600;
-    }
-    button:disabled{opacity:.6; cursor:not-allowed}
-    textarea{
-      width:100%; min-height:380px; margin-top:12px; padding:12px 14px; font-size:14px; resize:vertical;
-      color:var(--text); background:#0f1729; border:1px solid rgba(255,255,255,.08); border-radius:10px; white-space:pre-wrap;
-    }
-    .help{color:var(--muted); font-size:12px; margin-top:6px}
-    .status{margin-top:8px; font-size:13px; color:var(--muted)}
-    footer{margin-top:14px; text-align:right; font-size:12px; color:#7e8fb0}
-    a.link{color:#b5d6ff; text-decoration:none}
-    a.link:hover{text-decoration:underline}
-  </style>
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <div class="wrap">
-    <div class="card">
-      <h1>LucyOFM – Analize meciuri (10 puncte)</h1>
-      <p class="sub">Scrie meciul în format <strong>Gazdă - Oaspete</strong> și apasă „Generează analiza”.</p>
+    <header>
+      <h1>LucyOFM – Analize Meciuri</h1>
+      <div class="tag">GPT-5 • Surse externe • Feedback Mongo</div>
+    </header>
 
-      <label for="matchInput">Meci</label>
-      <input id="matchInput" type="text" placeholder="Exemplu: FC Copenhaga - Aarhus" autocomplete="off" />
+    <section class="card">
+      <label for="match">Meci <small>(format: Gazdă – Oaspeți)</small></label>
+      <input id="match" type="text" placeholder="FC Copenhaga – Aarhus" />
+      <button id="go">Generează analiza</button>
+      <div class="hint">Structură în 10 puncte + „De jucat”.</div>
+    </section>
 
-      <div class="row">
-        <button id="genBtn" onclick="generateAnalysis()">Generează analiza</button>
+    <section class="card">
+      <h3>Rezultat</h3>
+      <textarea id="out" rows="18" readonly></textarea>
+      <div class="actions">
+        <button id="voteUp">👍 Bun</button>
+        <button id="voteDown" class="warn">👎 Slab</button>
       </div>
+      <div id="status" class="status"></div>
+    </section>
 
-      <label for="output">Rezultat</label>
-      <textarea id="output" placeholder="Aici apare analiza în 10 puncte..."></textarea>
-
-      <div class="help">
-        Sfaturi: folosește cratima „-” sau „–” între echipe. Exemplu corect: „Korona Kielce - Radomiak”.
-      </div>
-
-      <div class="status" id="status"></div>
-
-      <footer>
-        <span>Backend: <code>/api/chat</code></span> ·
-        <a class="link" href="/api/chat" target="_blank" rel="noopener">Verifică status API</a>
-      </footer>
-    </div>
+    <footer>
+      <span>Status: Scrie meciul corect. Exemplu: „Korona Kielce – Radomiak”.</span>
+    </footer>
   </div>
 
   <script src="/script.js"></script>
