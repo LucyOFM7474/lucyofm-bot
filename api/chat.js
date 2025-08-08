@@ -1,7 +1,4 @@
 // api/chat.js — ÎNLOCUIEȘTE CODUL
-// Generează analiza în 10 puncte. NU contrazice sursele.
-// La punctul 1 listează clar fiecare sursă cu predicția ei.
-
 import OpenAI from "openai";
 import { fetchAllSources } from "./fetchSources.js";
 
@@ -9,10 +6,7 @@ const MODEL = process.env.OPENAI_MODEL || "gpt-5";
 const TIMEOUT_MS = 60000;
 
 const withTimeout = (p, ms, label = "op") =>
-  Promise.race([
-    p,
-    new Promise((_, rej) => setTimeout(() => rej(new Error(`${label} timed out`)), ms)),
-  ]);
+  Promise.race([p, new Promise((_, r) => setTimeout(() => r(new Error(`${label} timed out`)), ms))]);
 
 function clean(t) {
   return String(t || "")
@@ -23,103 +17,74 @@ function clean(t) {
     .trim();
 }
 
-// ——— Mapare rough a unei fraze în etichete 1/X/2/1X/X2/12/Over/Under
-function classifyPick(text = "") {
-  const s = text.toLowerCase();
-  if (!s) return null;
-
-  // priorități pe dublu / X2
-  if (/\b1x\b/.test(s) || /gazde sau egal|egal sau gazde/i.test(s)) return "1X";
-  if (/\bx2\b/.test(s) || /victorie.*(oaspe|millwall).*sau egal|câștigă.*sau egal/i.test(s)) return "X2";
-  if (/\b12\b/.test(s) || /fără egal/i.test(s)) return "12";
-
-  // simple
-  if (/victorie\s+gazd(e|a)|câștigă\s+gazd(e|a)|win\s*home|home\s*win/i.test(s)) return "1";
-  if (/\begal\b|draw/i.test(s)) return "X";
-  if (/victorie\s+oaspe|câștigă\s+oaspe|win\s*away|away\s*win/.test(s)) return "2";
-
-  // linii de goluri
-  if (/over\s*2\.?5|peste\s*2\.?5/.test(s)) return "Over2.5";
-  if (/under\s*2\.?5|sub\s*2\.?5/.test(s)) return "Under2.5";
-
-  return null;
+// Construim un rezumat „obligatoriu” al predicțiilor ca să nu fie contrazise
+function buildSourceSummary(s) {
+  const L = [];
+  if (s?.sportytrader)
+    L.push(`SportyTrader: ${s.sportytrader.prediction || "date insuficiente"}`);
+  if (s?.predictz) L.push(`PredictZ: ${s.predictz.prediction || "date insuficiente"}`);
+  if (s?.forebet) L.push(`Forebet: ${s.forebet.prediction || "date insuficiente"}`);
+  if (s?.windrawwin) L.push(`WinDrawWin: ${s.windrawwin.prediction || "date insuficiente"}`);
+  return L.join(" | ");
 }
 
-function perSourceSummary(s) {
-  const out = [];
-  const push = (name, obj) => {
-    if (!obj) return;
-    const pred = clean(obj.prediction || obj.picks?.[0] || "");
-    const tag = classifyPick(pred) || "date limitate";
-    out.push(`${name}: ${tag}${pred ? ` — ${pred.slice(0, 80)}` : ""}`);
-  };
-  push("SportyTrader", s?.sportytrader);
-  push("PredictZ", s?.predictz);
-  push("Forebet", s?.forebet);
-  push("WinDrawWin", s?.windrawwin);
-  return out;
-}
-
-// ——— Reguli stricte pentru GPT
 function buildPrompt({ userMatch, sources }) {
-  const ctx = {
+  const context = {
     sportytrader: {
+      title: sources?.sportytrader?.title || "",
       prediction: sources?.sportytrader?.prediction || "",
       keyPoints: sources?.sportytrader?.keyPoints || [],
       url: sources?.sportytrader?.url || "",
-      title: sources?.sportytrader?.title || "",
     },
     predictz: {
+      title: sources?.predictz?.title || "",
       prediction: sources?.predictz?.prediction || "",
       url: sources?.predictz?.url || "",
     },
     forebet: {
+      title: sources?.forebet?.title || "",
       prediction: sources?.forebet?.prediction || "",
       url: sources?.forebet?.url || "",
     },
     windrawwin: {
+      title: sources?.windrawwin?.title || "",
       prediction: sources?.windrawwin?.prediction || "",
       url: sources?.windrawwin?.url || "",
     },
-    perSource: perSourceSummary(sources),
   };
 
-  const HARD_RULES = `
-REGULI DURE (OBLIGATORII):
-- NU contrazice sursele. Dacă SportyTrader are "X2" (sau menționează "egal"), NU afirma "victorie gazde".
-- La punctul 1 listezi CLAR fiecare sursă pe o linie: "✅/⚠️ NumeSursă: etichetă (1, X, 2, 1X, X2, 12, Over/Under) – scurt motiv".
-- Dacă două sau mai multe surse spun "X2", tratează tendința ca avantaj oaspeți (evită "victorie gazde").
-- Dacă datele lipsesc, scrie "date limitate" sau "în lucru". NU inventa cote/jucători/statistici.
-- Folosește formatarea în 10 puncte, cu simboluri: ✅ consens, ⚠️ parțial, 📊 statistici, 🎯 recomandări.
-`;
+  const forceLine = buildSourceSummary(sources);
 
-  const FORMAT = `
-1) "Surse & Predicții" – line-by-line: SportyTrader / PredictZ / Forebet / WinDrawWin (✅ dacă există acord cu tendința finală, ⚠️ altfel).
-2) "Medie ponderată a predicțiilor" – concluzie generală (fără cote inventate).
-3) "Consens 1X2%" – procente orientative (ex.: 1:40% / X:30% / 2:30%) bazate pe surse.
-4) "Consens Over/Under%" – estimare generală (Over/Under 2.5).
-5) "Impact formă & absențe" – dacă lipsesc date: menționezi lipsa.
-6) "Golgheteri & penalty-uri" – dacă lipsesc date: menționezi lipsa.
-7) "📊 Posesie, cornere, galbene, faulturi" – dacă lipsesc date: "în lucru".
-8) "Tendințe ultimele 5 meciuri" – sinteză.
-9) "🎯 Recomandări de jucat" – 3–5 selecții; marchează: Solist sigur (1.4–1.6), Valoare ascunsă (1.7–2.0), Surpriză controlată (2.1–2.4). Fără cote exacte dacă nu le ai.
-10) "Note & verificări" – avertismente de ultim moment (absențe/meteo).
-`;
+  const rules = `
+Ești un asistent pentru analize fotbal în 10 puncte, în română, format compact pe stilul utilizatorului.
+Simboluri: ✅ consens, ⚠️ parțial, 📊 statistici, 🎯 recomandări.
+REGULĂ CRITICĂ: NU CONTRAZICE predicțiile explicite extrase din surse. 
+Dacă SportyTrader spune "X2", "egal" sau "câștigă [echipa]", reflectează EXACT asta. 
+Dacă sursele diferă, marchează "⚠️ opinii divergente". Nu inventa cote sau procente exacte.
 
-  const system = `
-Ești un analist de fotbal. Răspunzi STRICT în română, compact, fără caractere asiatice.
-Respectă întocmai REGULILE DURE și FORMATUL.
-${HARD_RULES}
-${FORMAT}
-`.trim();
+Puncte:
+1) "Surse & Predicții": listează PE LINIi ce spune fiecare sursă (ex.: "✅ SportyTrader: X2 (Millwall sau egal)").
+2) "Medie ponderată": sintetizează tendința generală.
+3) "Consens 1X2%": estimare orientativă (fără cote certe).
+4) "Consens Over/Under%".
+5) "Impact formă & absențe".
+6) "Golgheteri & penalty-uri" (dacă lipsesc, spune "date indisponibile").
+7) "📊 Posesie, cornere, galbene, faulturi" (dacă lipsesc, "în lucru").
+8) "Tendințe ultimele 5 meciuri".
+9) "🎯 Recomandări de jucat": 3–5 propuneri (Solist sigur 1.4–1.6, Valoare ascunsă 1.7–2.0, Surpriză controlată 2.1–2.4). Dacă sursele indică X2, nu propune "victorie clară" împotriva acestuia.
+10) "Note & verificări".
+Fără caractere asiatice. Ton profesionist, concis.
+`;
 
   const user = `
 Meci: ${userMatch}
-DATE EXTRASE DIN SURSE (nu le repeta integral, doar folosește-le corect):
-${JSON.stringify(ctx, null, 2)}
+Rezumat predicții extrase (OBLIGATORIU de respectat): ${forceLine}
+
+Context JSON:
+${JSON.stringify(context, null, 2)}
 `.trim();
 
-  return { system, user };
+  return { system: rules.trim(), user };
 }
 
 function ok(res, payload) {
@@ -135,7 +100,6 @@ export default async function handler(req, res) {
       res.setHeader("Allow", "POST");
       return fail(res, 405, "Method Not Allowed");
     }
-
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return fail(res, 500, "OPENAI_API_KEY lipsă");
 
@@ -143,23 +107,20 @@ export default async function handler(req, res) {
     const match = clean(body.match || body.meci || body.query || "");
     if (!match) return fail(res, 400, "Parametrul 'match' este obligatoriu");
 
-    // 1) Surse
     let sources = {};
     try {
-      sources = await withTimeout(fetchAllSources(match), TIMEOUT_MS, "fetchSources");
+      sources = await withTimeout(fetchAllSources(match), TIMEOUT_MS, "fetchAllSources");
     } catch {
       sources = {};
     }
 
-    // 2) Prompt
     const { system, user } = buildPrompt({ userMatch: match, sources });
-
-    // 3) GPT
     const client = new OpenAI({ apiKey });
+
     const completion = await withTimeout(
       client.chat.completions.create({
         model: MODEL,
-        temperature: 0.2,
+        temperature: 0.25,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
@@ -169,21 +130,8 @@ export default async function handler(req, res) {
       "openai"
     );
 
-    const text =
-      completion?.choices?.[0]?.message?.content?.trim() ||
-      "Nu am reușit să generez analiza.";
-
-    return ok(res, {
-      model: MODEL,
-      match,
-      analysis: text,
-      sources: {
-        sportytrader: sources?.sportytrader || null,
-        predictz: sources?.predictz || null,
-        forebet: sources?.forebet || null,
-        windrawwin: sources?.windrawwin || null,
-      },
-    });
+    const text = completion?.choices?.[0]?.message?.content?.trim() || "Nu am reușit să generez analiza.";
+    return ok(res, { model: MODEL, match, analysis: text, sources });
   } catch (err) {
     return fail(res, 500, err?.message || "Eroare server");
   }
