@@ -1,1 +1,33 @@
-/* TODO: stilizare completă aici */
+:root { --bg:#0b0f14; --card:#131922; --text:#eef2f8; --muted:#9fb0c1; --pri:#4aa3ff; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: var(--bg); color: var(--text);
+}
+.top { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #1b2431; }
+.top h1 { margin:0; font-size:20px; }
+.badge { background:#0f253d; color:#cfe6ff; padding:6px 10px; border-radius:12px; font-size:12px; }
+.wrap { max-width: 900px; margin: 24px auto; padding: 0 14px; }
+.card {
+  background: var(--card); border:1px solid #1b2431; border-radius:14px; padding:16px; margin-bottom:16px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.25);
+}
+label { display:block; margin:6px 0; color: var(--muted); font-size:13px; }
+input[type="text"], input[type="date"] {
+  width:100%; padding:10px 12px; border-radius:10px; border:1px solid #243145; background:#0e141d; color:var(--text);
+}
+.row { display:flex; gap:12px; align-items:flex-end; margin-top:12px; }
+.col { flex:1; }
+button {
+  width:100%; padding:12px; border:0; border-radius:10px; background:var(--pri); color:#00162b; font-weight:700; cursor:pointer;
+}
+button:disabled { opacity:.6; cursor:not-allowed; }
+.hint { color: var(--muted); display:block; margin-top:8px; }
+
+.status { margin: 4px 0 10px; color:#cfe6ff; }
+.output {
+  white-space: pre-wrap; background:#0e141d; border:1px solid #243145; border-radius:10px; padding:12px; min-height: 220px;
+}
+.feedback { display:flex; gap:10px; margin-top:10px; }
+.foot { text-align:center; color:#6f8196; padding:18px 0 28px; font-size:12px; }
