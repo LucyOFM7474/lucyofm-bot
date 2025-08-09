@@ -2,7 +2,7 @@
 <html lang="ro">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LucyOFM – Analize meciuri</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
@@ -18,17 +18,16 @@
         <label>Away</label>
         <input id="away" placeholder="ex: FCSB" required />
       </div>
-      <div class="row">
-        <label>URL-uri surse (câte una pe linie)</label>
-        <textarea id="urls" rows="5" placeholder="ex:\nhttps://www.sportytrader.com/.../rapid-fcsb/\nhttps://www.predictz.com/..."></textarea>
-      </div>
+      <details>
+        <summary>Opțional: URL-uri surse (câte una pe linie)</summary>
+        <textarea id="urls" rows="4" placeholder="Lase gol – botul caută singur."></textarea>
+      </details>
       <button id="go" type="submit">Analizează</button>
     </form>
 
     <div id="status" class="status"></div>
     <pre id="output" class="output"></pre>
   </div>
-
   <script src="./script.js"></script>
 </body>
 </html>
