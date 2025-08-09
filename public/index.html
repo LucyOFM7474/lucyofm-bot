@@ -5,69 +5,41 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LucyOFM – Analize Meciuri</title>
   <link rel="stylesheet" href="/style.css" />
+  <style>
+    :root { --bg:#0b0d10; --card:#151922; --text:#f2f5f9; --muted:#9aa4b2; --accent:#4da3ff; }
+    body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto}
+    .wrap{max-width:860px;margin:0 auto;padding:16px}
+    h1{margin:8px 0 6px;font-size:26px}
+    .card{background:#151922;border:1px solid #1f2532;border-radius:14px;padding:14px;margin:12px 0}
+    label{display:block;margin-bottom:8px;color:var(--muted)}
+    input{width:100%;padding:12px;border-radius:10px;border:1px solid #2a3142;background:#0f141b;color:var(--text)}
+    input:focus{outline:none;border-color:var(--accent)}
+    .row{display:flex;gap:10px;margin-top:12px}
+    button{background:#245eb8;border:1px solid #2b6ad0;color:#fff;padding:10px 16px;border-radius:10px;cursor:pointer}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    pre{white-space:pre-wrap;background:#0f141b;border:1px solid #1f2532;border-radius:10px;padding:12px;min-height:120px;margin:0}
+    .hint{color:var(--muted);font-size:13px;margin-top:6px}
+  </style>
 </head>
 <body>
-  <header class="container">
+  <div class="wrap">
     <h1>LucyOFM – Analize Meciuri</h1>
-    <div class="hint">Format: <code>Gazdă – Oaspeți</code> (ex. <em>Oxford – Portsmouth</em>) sau lipiți URL-ul direct de la SportyTrader.</div>
-  </header>
-
-  <main class="container">
-    <form id="matchForm" class="card">
-      <div class="grid">
-        <div class="field">
-          <label for="homeTeam">Gazdă</label>
-          <input id="homeTeam" placeholder="ex. Oxford" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="awayTeam">Oaspeți</label>
-          <input id="awayTeam" placeholder="ex. Portsmouth" autocomplete="off" />
-        </div>
-      </div>
-
-      <details class="more">
-        <summary>Linkuri opționale directe (dacă le ai)</summary>
-        <div class="grid">
-          <div class="field">
-            <label for="urlSportyTrader">SportyTrader URL</label>
-            <input id="urlSportyTrader" placeholder="https://www.sportytrader.com/ro/pronosticuri/..." />
-          </div>
-          <div class="field">
-            <label for="urlForebet">Forebet URL</label>
-            <input id="urlForebet" placeholder="https://www.forebet.com/en/predictions/..." />
-          </div>
-          <div class="field">
-            <label for="urlPredictZ">PredictZ URL</label>
-            <input id="urlPredictZ" placeholder="https://www.predictz.com/predictions/..." />
-          </div>
-        </div>
-      </details>
-
-      <div class="actions">
-        <button type="submit" id="btnFetchSources" class="btn primary">Citește sursele</button>
-        <button type="button" id="btnGenerate" class="btn">Generează analiza</button>
-      </div>
-    </form>
 
     <section class="card">
-      <h2>Surse & Linkuri</h2>
-      <div class="links">
-        <a id="linkSportyTrader" class="pill" target="_blank" rel="noopener">Deschide SportyTrader</a>
-        <a id="linkForebet" class="pill" target="_blank" rel="noopener">Deschide Forebet</a>
-        <a id="linkPredictZ" class="pill" target="_blank" rel="noopener">Deschide PredictZ</a>
+      <label for="query">Meci (un singur câmp):</label>
+      <input id="query" placeholder="Ex.: Oxford – Portsmouth  |  Norwich - Millwall  |  https://www.sportytrader.com/ro/pronosticuri/..." />
+      <div class="hint">Poți scrie „Gazdă – Oaspeți”, un <em>slug</em> sau chiar URL-ul direct de SportyTrader.</div>
+      <div class="row">
+        <button id="btnGenerate">Generează analiza</button>
       </div>
-      <pre id="sourcesBox" class="mono dim">Nicio sursă încă. Apasă „Citește sursele”.</pre>
     </section>
 
     <section class="card">
       <h2>Structură în 10 puncte – „De jucat”.</h2>
-      <pre id="resultBox" class="mono large">Nicio analiză încă. Apasă „Generează analiza”.</pre>
+      <pre id="resultBox">Nicio analiză încă.</pre>
+      <div class="hint">Punctul 1 conține textual predicțiile din SportyTrader, PredictZ și Forebet (fără reformulare).</div>
     </section>
-  </main>
-
-  <footer class="container foot dim">
-    <span>Fundal negru • Text alb • Simboluri ✅ ⚠️ 📊 🎯 • Fără caractere asiatice</span>
-  </footer>
+  </div>
 
   <script src="/script.js"></script>
 </body>
