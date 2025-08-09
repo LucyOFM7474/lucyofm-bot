@@ -1,6 +1,6 @@
-// api/fetchSources.js
-import axios from "axios";
-import * as cheerio from "cheerio";
+// api/fetchSources.js (CommonJS)
+const axios = require("axios");
+const cheerio = require("cheerio");
 
 const TIMEOUT = 25000;
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
@@ -16,7 +16,6 @@ async function httpGet(url) {
   return String(data || "");
 }
 
-// -------- normalize / slug ----------
 const normalize = (s) =>
   String(s || "")
     .normalize("NFD")
@@ -27,7 +26,6 @@ const normalize = (s) =>
 
 const slugify = (s) => normalize(s).toLowerCase().replace(/\s+/g, "-");
 
-// -------- url candidates ------------
 function sportyCandidates(home, away) {
   const h = slugify(home), a = slugify(away);
   return [
@@ -52,11 +50,9 @@ function forebetCandidates(home, away) {
   ];
 }
 
-// -------- parsers -------------------
 function parseSportyTrader(html, url) {
   const $ = cheerio.load(html);
   const title = t($("h1").first().text()) || t($("title").text());
-  const date = $('[itemprop="startDate"]').attr("content") || $("time").first().attr("datetime") || "";
 
   let prediction = "";
   const predH2 = $('h2:contains("Pronosticul nostru"), h2:contains("Predicția noastră"), h2:contains("Our prediction")').first();
@@ -79,7 +75,7 @@ function parseSportyTrader(html, url) {
     else if (mVict) prediction = `Victorie ${mVict[1]}`;
     else if (mChance) prediction = mChance[1].toUpperCase();
   }
-  return { source: "SportyTrader", url, title, date, prediction: t(prediction) };
+  return { source: "SportyTrader", url, title, prediction: t(prediction) };
 }
 
 function parsePredictZ(html, url) {
@@ -112,7 +108,7 @@ function parseForebet(html, url) {
   return { source: "Forebet", url, title, prediction: t(prediction) };
 }
 
-async function resolveAndParse(source, candidates, parser) {
+async function resolveAndParse(candidates, parser) {
   for (const url of candidates) {
     try {
       const html = await httpGet(url);
@@ -124,44 +120,40 @@ async function resolveAndParse(source, candidates, parser) {
   return { ok: false };
 }
 
-// =============== CORE (reutilizabil) =================
-export async function getSources({ homeTeam, awayTeam, urls }) {
+async function getSources({ homeTeam, awayTeam, urls }) {
   const h = normalize(homeTeam || "Gazda");
   const a = normalize(awayTeam || "Oaspeții");
 
   const googleLink = (domain) =>
     `https://www.google.com/search?q=site%3A${encodeURIComponent(domain)}+${encodeURIComponent(h)}+${encodeURIComponent(a)}+pronostic+predictii`;
 
-  // SPORTYTRADER
   let sporty;
   if (urls?.sportytrader) {
     const html = await httpGet(urls.sportytrader);
     sporty = parseSportyTrader(html, urls.sportytrader);
     sporty.ok = true;
   } else {
-    sporty = await resolveAndParse("SportyTrader", sportyCandidates(h, a), parseSportyTrader);
+    sporty = await resolveAndParse(sportyCandidates(h, a), parseSportyTrader);
     if (!sporty?.url) sporty = { ...sporty, url: googleLink("sportytrader.com") };
   }
 
-  // PREDICTZ
   let predictz;
   if (urls?.predictz) {
     const html = await httpGet(urls.predictz);
     predictz = parsePredictZ(html, urls.predictz);
     predictz.ok = true;
   } else {
-    predictz = await resolveAndParse("PredictZ", predictzCandidates(h, a), parsePredictZ);
+    predictz = await resolveAndParse(predictzCandidates(h, a), parsePredictZ);
     if (!predictz?.url) predictz = { ...predictz, url: googleLink("predictz.com") };
   }
 
-  // FOREBET
   let forebet;
   if (urls?.forebet) {
     const html = await httpGet(urls.forebet);
     forebet = parseForebet(html, urls.forebet);
     forebet.ok = true;
   } else {
-    forebet = await resolveAndParse("Forebet", forebetCandidates(h, a), parseForebet);
+    forebet = await resolveAndParse(forebetCandidates(h, a), parseForebet);
     if (!forebet?.url) forebet = { ...forebet, url: googleLink("forebet.com") };
   }
 
@@ -176,8 +168,8 @@ export async function getSources({ homeTeam, awayTeam, urls }) {
   };
 }
 
-// =============== HTTP handler ========================
-export default async function handler(req, res) {
+// HTTP handler
+module.exports = async function handler(req, res) {
   try {
     if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
     const { homeTeam, awayTeam, urls } = req.body || {};
@@ -187,4 +179,7 @@ export default async function handler(req, res) {
   } catch (err) {
     res.status(500).json({ ok: false, error: err?.message || String(err) });
   }
-}
+};
+
+// export pentru alte module CommonJS
+module.exports.getSources = getSources;
