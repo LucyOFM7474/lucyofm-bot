@@ -1,26 +1,34 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ro">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LucyOFM Bot – Analize meciuri</title>
-  <link rel="stylesheet" href="style.css" />
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#0070f3" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LucyOFM – Analize meciuri</title>
+  <link rel="stylesheet" href="./style.css" />
 </head>
-<body>
-  <div class="container">
-    <h1>🧠 LucyOFM Analize Meciuri</h1>
-    <textarea id="prompt" placeholder="Scrie meciul aici (ex: Rapid - FCSB)..."></textarea>
-    <button onclick="analizeaza()">🔍 Analizează Meci</button>
-    <button onclick="stergeIstoric()" style="background:#ff4444;color:#fff;border:none;padding:6px 12px;border-radius:4px;font-size:12px;margin-top:4px;">🗑️ Șterge istoric</button>
-    <pre id="rezultat">📝 Aici apar cele 10 puncte analizate...</pre>
-    
-    <div id="istoric" style="margin-top:20px;">
-      <h3>📚 Istoric Analize</h3>
-      <div id="istoric-list"></div>
-    </div>
+<body class="app">
+  <div class="card">
+    <h1>LucyOFM – Analize meciuri</h1>
+    <form id="form">
+      <div class="row">
+        <label>Home</label>
+        <input id="home" placeholder="ex: Rapid" required />
+      </div>
+      <div class="row">
+        <label>Away</label>
+        <input id="away" placeholder="ex: FCSB" required />
+      </div>
+      <div class="row">
+        <label>URL-uri surse (câte una pe linie)</label>
+        <textarea id="urls" rows="5" placeholder="ex:\nhttps://www.sportytrader.com/.../rapid-fcsb/\nhttps://www.predictz.com/..."></textarea>
+      </div>
+      <button id="go" type="submit">Analizează</button>
+    </form>
+
+    <div id="status" class="status"></div>
+    <pre id="output" class="output"></pre>
   </div>
-  <script src="script.js"></script>
+
+  <script src="./script.js"></script>
 </body>
 </html>
