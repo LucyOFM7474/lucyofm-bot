@@ -1,5 +1,5 @@
-// api/chat.js — Auto-search + ScraperAPI obligatoriu + DIAGNOSTIC ENV + 10 puncte
-// ENV necesare (Production): OPENAI_API_KEY, SCRAPER_API_KEY
+// api/chat.js — auto-search + ScraperAPI obligatoriu + DIAGNOSTIC complet
+// ENV (Production): OPENAI_API_KEY, SCRAPER_API_KEY
 
 const { OpenAI } = require("openai");
 const cheerio = require("cheerio");
@@ -7,22 +7,21 @@ const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const ALLOWED = ["sportytrader.com","predictz.com","forebet.com","windrawwin.com"];
 
+function reqEnv(name) {
+  const v = process.env[name];
+  if (!v) throw new Error(`ENV lipsă: ${name} (setează în Vercel → Settings → Environment Variables → PRODUCTION)`);
+  return v;
+}
 const hasOpenAI = !!process.env.OPENAI_API_KEY;
 const hasScraper = !!process.env.SCRAPER_API_KEY;
 
-function must(name) {
-  const v = process.env[name];
-  if (!v) throw new Error(`ENV lipsă: ${name} (setați în Vercel → Settings → Environment Variables → Production)`);
-  return v;
-}
-
-function proxyURL(raw, opts = {}) {
-  const key = must("SCRAPER_API_KEY");
+function proxyURL(raw, { render = true, country = "eu" } = {}) {
+  const key = reqEnv("SCRAPER_API_KEY");
   const u = new URL("https://api.scraperapi.com/");
   u.searchParams.set("api_key", key);
   u.searchParams.set("url", raw);
-  u.searchParams.set("render", String(opts.render ?? true));
-  u.searchParams.set("country_code", opts.country ?? "eu");
+  u.searchParams.set("render", String(render));
+  u.searchParams.set("country_code", country);
   return u.toString();
 }
 
@@ -55,27 +54,26 @@ function cleanText(html, maxLen = 22000) {
   return text;
 }
 
-function ddgQuery(q){ const u=new URL("https://duckduckgo.com/html/"); u.searchParams.set("q",q); return u.toString(); }
-function googleQuery(q){ const u=new URL("https://www.google.com/search"); u.searchParams.set("q",q); u.searchParams.set("hl","en"); return u.toString(); }
-function isAllowed(u){ try{ const h=new URL(u).hostname.replace(/^www\./,""); return ALLOWED.some(d=>h.endsWith(d)); }catch{ return false; } }
-function normalizeGoogleHref(h){ if(!h) return ""; if(h.startsWith("/url?q=")){ try{ return decodeURIComponent(h.split("/url?q=")[1].split("&")[0]); }catch{ return h; } } return h; }
+// --- căutare (prin proxy) ---
+const ddg = q => { const u=new URL("https://duckduckgo.com/html/"); u.searchParams.set("q",q); return u.toString(); };
+const ggl = q => { const u=new URL("https://www.google.com/search"); u.searchParams.set("q",q); u.searchParams.set("hl","en"); return u.toString(); };
+const isAllowed = u => { try{ const h=new URL(u).hostname.replace(/^www\./,""); return ALLOWED.some(d=>h.endsWith(d)); }catch{ return false; } };
+const normG = h => (h && h.startsWith("/url?q=")) ? decodeURIComponent(h.split("/url?q=")[1].split("&")[0]) : (h||"");
 
-async function searchEngine(url){
+async function searchEngine(url) {
   const html = await getHTML(proxyURL(url,{render:true}));
   const $ = cheerio.load(html);
   const links = [];
-  // DuckDuckGo
   $(".result__a, a.result__a").each((_,a)=>{ const href=$(a).attr("href"); if(href?.startsWith("http") && isAllowed(href)) links.push(href); });
-  // Google fallback
-  if(links.length===0){
-    $("a").each((_,a)=>{ const raw=$(a).attr("href")||""; const href=normalizeGoogleHref(raw); if(href.startsWith("http") && isAllowed(href)) links.push(href); });
+  if (!links.length) {
+    $("a").each((_,a)=>{ const href=normG($(a).attr("href")); if(href.startsWith("http") && isAllowed(href)) links.push(href); });
   }
   return Array.from(new Set(links)).slice(0,6);
 }
 
-async function autoFindSources(home,away){
+async function autoFindSources(home,away) {
   const base = `${home} vs ${away} prediction`;
-  const qs = [
+  const queries = [
     `site:sportytrader.com ${base}`,
     `site:predictz.com ${base}`,
     `site:forebet.com ${base}`,
@@ -83,37 +81,32 @@ async function autoFindSources(home,away){
     base
   ];
   let found = [];
-  for(const q of qs){
-    try{
-      const ddg = await searchEngine(ddgQuery(q));
-      found = found.concat(ddg);
-      if(found.length<6){
-        const gg = await searchEngine(googleQuery(q));
-        found = found.concat(gg);
-      }
-    }catch(e){ /* ignoră */ }
-    if(found.length>=6) break;
+  for (const q of queries) {
+    try { found = found.concat(await searchEngine(ddg(q))); } catch {}
+    if (found.length < 6) { try { found = found.concat(await searchEngine(ggl(q))); } catch {} }
+    if (found.length >= 6) break;
   }
   const uniq = Array.from(new Set(found));
   const score = u => { const h=new URL(u).hostname.replace(/^www\./,""); const i=ALLOWED.findIndex(d=>h.endsWith(d)); return i===-1?99:i; };
   return uniq.sort((a,b)=>score(a)-score(b)).slice(0,6);
 }
 
-async function scrape(url){
-  try{
+async function scrape(url) {
+  try {
     const html = await getHTML(proxyURL(url,{render:true}));
     return { url, ok:true, proxied:true, text: cleanText(html) };
-  }catch(e){ return { url, ok:false, error:String(e?.message||e) }; }
+  } catch (e) {
+    return { url, ok:false, error:String(e?.message||e) };
+  }
 }
 
-function sysPrompt(){
+function sysPrompt() {
   return [
     "Ești botul LucyOFM – Analize meciuri.",
-    "FORMAT OBLIGATORIU: 10 puncte, cu ✅ (consens), ⚠️ (riscuri), 📊 (statistici), 🎯 (recomandări).",
-    "Fără caractere asiatice. Fără cuvântul «Simbol». Ton ferm, concis, profesionist.",
+    "FORMAT: 10 puncte cu ✅ ⚠️ 📊 🎯. Fără caractere asiatice. Fără cuvântul «Simbol». Ton ferm, concis.",
     "Nu inventa; folosește DOAR textul extras. Dacă sursele se contrazic, marchează cu ⚠️.",
-    "La început: lista pe scurt ce spune fiecare sursă. Final: 3–5 recomandări 🎯, pe linii separate.",
-    "Dacă nu există text din surse: «Date insuficiente din surse – analiză bazată pe model»."
+    "Început: ce spune fiecare sursă (✅ dacă ≥3 coincid). Final: 3–5 recomandări 🎯, fiecare pe linie.",
+    "Dacă n-ai text din surse: «Date insuficiente din surse – analiză bazată pe model»."
   ].join("\n");
 }
 
@@ -122,30 +115,28 @@ module.exports = async (req,res)=>{
   res.setHeader("Access-Control-Allow-Origin","*");
   res.setHeader("Access-Control-Allow-Methods","POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers","Content-Type");
-  if(req.method==="OPTIONS") return res.status(200).end();
-  if(req.method!=="POST") return res.status(405).json({error:"Metoda nu este permisă"});
+  if (req.method==="OPTIONS") return res.status(200).end();
+  if (req.method!=="POST") return res.status(405).json({ error: "Metoda nu este permisă" });
 
-  // DIAGNOSTIC ENV în răspuns
-  const envDiag = { hasOpenAI, hasScraper, node: process.version };
+  const env = { hasOpenAI, hasScraper, node: process.version };
 
-  try{
-    must("OPENAI_API_KEY");
-    must("SCRAPER_API_KEY");
+  try {
+    reqEnv("OPENAI_API_KEY");
+    reqEnv("SCRAPER_API_KEY");
 
-    const body = typeof req.body==="string" ? JSON.parse(req.body||"{}") : (req.body||{});
-    const home=(body.home||"").trim(); const away=(body.away||"").trim();
-    let urls = Array.isArray(body.urls)? body.urls.filter(Boolean): [];
-    if(!home || !away) return res.status(400).json({error:"Câmpurile 'home' și 'away' sunt obligatorii", env: envDiag});
+    const body = typeof req.body === "string" ? JSON.parse(req.body||"{}") : (req.body||{});
+    const home = (body.home||"").trim();
+    const away = (body.away||"").trim();
+    let urls = Array.isArray(body.urls) ? body.urls.filter(Boolean) : [];
+    if (!home || !away) return res.status(400).json({ error:"Câmpurile 'home' și 'away' sunt obligatorii", env });
 
-    if(urls.length===0){
-      urls = await autoFindSources(home,away);
-    }
+    if (urls.length === 0) urls = await autoFindSources(home, away);
 
     const scraped = [];
-    for(const u of urls.slice(0,6)) scraped.push(await scrape(u));
+    for (const u of urls.slice(0,6)) scraped.push(await scrape(u));
 
-    const diag = scraped.length
-      ? scraped.map(s=> (s.ok? "OK  (proxy) " : "FAIL ") + s.url + (s.error? ` — ${s.error}`:"")).join("\n")
+    const diagText = scraped.length
+      ? scraped.map(s => (s.ok ? "OK  (proxy) " : "FAIL ") + s.url + (s.error ? ` — ${s.error}` : "")).join("\n")
       : "(fără)";
 
     const srcBlock = scraped.filter(s=>s.ok && s.text)
@@ -154,21 +145,19 @@ module.exports = async (req,res)=>{
     const messages = [
       { role:"system", content: sysPrompt() },
       { role:"user", content:
-        `Meci: ${home} vs ${away}\n\n# DIAGNOSTIC SCRAPING\n${diag}\n\n# TEXT EXTRAS DIN SURSE\n${srcBlock || "(niciun text disponibil)"}`
+        `Meci: ${home} vs ${away}\n\n# DIAGNOSTIC SCRAPING\n${diagText}\n\n# TEXT EXTRAS DIN SURSE\n${srcBlock || "(niciun text disponibil)"}`
       }
     ];
 
     const r = await client.chat.completions.create({
-      model:"gpt-4o-mini",
-      temperature:0.2,
+      model: "gpt-4o-mini",
+      temperature: 0.2,
       messages
     });
 
     const text = r.choices?.[0]?.message?.content || "(fără conținut)";
-    return res.status(200).json({ ok:true, env: envDiag, tried: urls, scraped, result: text });
-  }catch(e){
-    console.error("Eroare:", e);
-    // expune diagnostic ENV și eroarea clar în răspuns
-    return res.status(500).json({ error: String(e?.message||e), env: envDiag });
+    return res.status(200).json({ ok:true, env, tried: urls, scraped, result: text });
+  } catch (e) {
+    return res.status(500).json({ ok:false, env, error: String(e?.message||e) });
   }
 };
