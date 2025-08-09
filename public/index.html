@@ -1,47 +1,26 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ro">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>LucyOFM – Analize meciuri</title>
-  <link rel="stylesheet" href="./style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LucyOFM Bot – Analize meciuri</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0070f3" />
 </head>
 <body>
-  <main class="container">
-    <h1>LucyOFM – Analize meciuri</h1>
-
-    <form id="frm">
-      <div class="row">
-        <label>Gazde</label>
-        <input id="home" placeholder="ex: FC Brugge" required />
-      </div>
-      <div class="row">
-        <label>Oaspeți</label>
-        <input id="away" placeholder="ex: Cercle Brugge" required />
-      </div>
-      <div class="row">
-        <label>Data (opțional)</label>
-        <input id="when" placeholder="ex: 2025-08-10" />
-      </div>
-      <div class="row">
-        <label>URL surse (una pe linie)</label>
-        <textarea id="urls" placeholder="https://www.sportytrader.com/...&#10;https://www.predictz.com/...&#10;https://www.forebet.com/...&#10;https://www.windrawwin.com/...&#10;https://betsloaded.com/..."></textarea>
-      </div>
-      <button id="go" type="submit">Generează analiza</button>
-    </form>
-
-    <section id="meta"></section>
-    <section id="out" class="panel"></section>
-
-    <div class="actions">
-      <button id="like">👍 Îmi place</button>
-      <button id="dislike">👎 Nu-mi place</button>
-      <button id="copy">📋 Copiază</button>
+  <div class="container">
+    <h1>🧠 LucyOFM Analize Meciuri</h1>
+    <textarea id="prompt" placeholder="Scrie meciul aici (ex: Rapid - FCSB)..."></textarea>
+    <button onclick="analizeaza()">🔍 Analizează Meci</button>
+    <button onclick="stergeIstoric()" style="background:#ff4444;color:#fff;border:none;padding:6px 12px;border-radius:4px;font-size:12px;margin-top:4px;">🗑️ Șterge istoric</button>
+    <pre id="rezultat">📝 Aici apar cele 10 puncte analizate...</pre>
+    
+    <div id="istoric" style="margin-top:20px;">
+      <h3>📚 Istoric Analize</h3>
+      <div id="istoric-list"></div>
     </div>
-
-    <section id="feedback" class="muted"></section>
-  </main>
-
-  <script src="./script.js"></script>
+  </div>
+  <script src="script.js"></script>
 </body>
 </html>
