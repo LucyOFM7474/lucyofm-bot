@@ -2,32 +2,35 @@ const form = document.getElementById("form");
 const out = document.getElementById("output");
 const statusEl = document.getElementById("status");
 
-function setStatus(m){ statusEl.textContent = m||""; }
+function setStatus(msg) { statusEl.textContent = msg || ""; }
 
-form.addEventListener("submit", async (e)=>{
-  e.preventDefault(); out.textContent=""; setStatus("Se analizează...");
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  out.textContent = "";
+  setStatus("Se caută surse și se generează analiza...");
+
   const home = document.getElementById("home").value.trim();
   const away = document.getElementById("away").value.trim();
-  const urls = document.getElementById("urls").value.trim()
-    .split("\n").map(s=>s.trim()).filter(Boolean);
+  const urlsRaw = document.getElementById("urls").value.trim();
+  const urls = urlsRaw ? urlsRaw.split("\n").map(s => s.trim()).filter(Boolean) : [];
 
-  try{
+  try {
     const res = await fetch("/api/chat", {
-      method:"POST",
-      headers:{ "content-type":"application/json" },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ home, away, urls })
     });
     const data = await res.json();
-    if(!res.ok || !data.ok) throw new Error(data?.error||"Eroare necunoscută");
+    if (!res.ok || !data.ok) throw new Error(data?.error || "Eroare necunoscută");
 
-    // Diagnoză scraping
-    const diag = (data.scraped||[]).map(s =>
-      `${s.ok ? "OK" : "FAIL"} ${s.proxied ? "[proxy]" : ""} ${s.url}\n${s.error?("Eroare: "+s.error):("Preview: "+(s.preview||""))}`
-    ).join("\n---\n");
-
-    out.textContent = `# DIAGNOSTIC SCRAPING\n${diag||"(fără)"}\n\n# ANALIZĂ\n${data.result||"(fără rezultat)"}`;
+    // Afișează diagnosticul + analiza
+    const diag = (data.scraped || [])
+      .map(s => (s.ok ? "OK  " : "FAIL ") + (s.proxied ? "(proxy) " : "") + s.url + (s.error ? " — " + s.error : ""))
+      .join("\n");
+    const header = "# DIAGNOSTIC SCRAPING\n" + (diag || "(fără)") + "\n\n# ANALIZĂ\n";
+    out.textContent = header + (data.result || "(fără rezultat)");
     setStatus("Gata ✓");
-  }catch(err){
-    setStatus("Eroare: "+(err?.message||err));
+  } catch (err) {
+    setStatus("Eroare: " + (err?.message || err));
   }
 });
