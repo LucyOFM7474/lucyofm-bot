@@ -1,11 +1,10 @@
-// api/chat.js — auto-search + ScraperAPI obligatoriu + DIAGNOSTIC complet
-// ENV (Production): OPENAI_API_KEY, SCRAPER_API_KEY
+// api/chat.js — căutare direct pe site + ScraperAPI + DIAGNOSTIC clar
+// ENV Production necesar: OPENAI_API_KEY, SCRAPER_API_KEY
+// Frontend: /public/script.js deja afișează env + diagnostic (nu îl schimba).
 
 const { OpenAI } = require("openai");
 const cheerio = require("cheerio");
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-const ALLOWED = ["sportytrader.com","predictz.com","forebet.com","windrawwin.com"];
 
 function reqEnv(name) {
   const v = process.env[name];
@@ -25,20 +24,23 @@ function proxyURL(raw, { render = true, country = "eu" } = {}) {
   return u.toString();
 }
 
-async function getHTML(url, timeoutMs = 18000) {
+async function getHTML(url, { render = true, timeoutMs = 18000 } = {}) {
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
+    const res = await fetch(proxyURL(url, { render }), {
       headers: {
-        "user-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
-        "accept":"text/html,application/xhtml+xml"
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+        "accept": "text/html,application/xhtml+xml"
       },
       signal: controller.signal
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.text();
-  } finally { clearTimeout(t); }
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function cleanText(html, maxLen = 22000) {
@@ -54,49 +56,105 @@ function cleanText(html, maxLen = 22000) {
   return text;
 }
 
-// --- căutare (prin proxy) ---
-const ddg = q => { const u=new URL("https://duckduckgo.com/html/"); u.searchParams.set("q",q); return u.toString(); };
-const ggl = q => { const u=new URL("https://www.google.com/search"); u.searchParams.set("q",q); u.searchParams.set("hl","en"); return u.toString(); };
-const isAllowed = u => { try{ const h=new URL(u).hostname.replace(/^www\./,""); return ALLOWED.some(d=>h.endsWith(d)); }catch{ return false; } };
-const normG = h => (h && h.startsWith("/url?q=")) ? decodeURIComponent(h.split("/url?q=")[1].split("&")[0]) : (h||"");
-
-async function searchEngine(url) {
-  const html = await getHTML(proxyURL(url,{render:true}));
-  const $ = cheerio.load(html);
-  const links = [];
-  $(".result__a, a.result__a").each((_,a)=>{ const href=$(a).attr("href"); if(href?.startsWith("http") && isAllowed(href)) links.push(href); });
-  if (!links.length) {
-    $("a").each((_,a)=>{ const href=normG($(a).attr("href")); if(href.startsWith("http") && isAllowed(href)) links.push(href); });
-  }
-  return Array.from(new Set(links)).slice(0,6);
+// ---------- CĂUTARE DIRECTĂ PE SITE-URI (fără Google/DDG) ----------
+function normTeam(s) {
+  return (s||"").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-async function autoFindSources(home,away) {
-  const base = `${home} vs ${away} prediction`;
-  const queries = [
-    `site:sportytrader.com ${base}`,
-    `site:predictz.com ${base}`,
-    `site:forebet.com ${base}`,
-    `site:windrawwin.com ${base}`,
-    base
-  ];
-  let found = [];
-  for (const q of queries) {
-    try { found = found.concat(await searchEngine(ddg(q))); } catch {}
-    if (found.length < 6) { try { found = found.concat(await searchEngine(ggl(q))); } catch {} }
-    if (found.length >= 6) break;
+// SPORTYTRADER: /en/search/?q=home%20away
+async function findOnSportyTrader(home, away) {
+  const q = encodeURIComponent(`${home} ${away}`);
+  const searchURL = `https://www.sportytrader.com/en/search/?q=${q}`;
+  const html = await getHTML(searchURL, { render: false, timeoutMs: 15000 });
+  const $ = cheerio.load(html);
+  const links = new Set();
+  $('a[href*="sportytrader.com/en/"]').each((_, a) => {
+    const href = $(a).attr("href");
+    if (!href) return;
+    const url = href.startsWith("http") ? href : `https://www.sportytrader.com${href}`;
+    // prioritizăm pagini de tips/predictions/match
+    if (/\/en\/(betting-tips|predictions|match)/.test(url)) links.add(url);
+  });
+  return Array.from(links).slice(0, 2);
+}
+
+// FOREBET: /en/search?query=home%20away
+async function findOnForebet(home, away) {
+  const q = encodeURIComponent(`${home} ${away}`);
+  const searchURL = `https://www.forebet.com/en/search?query=${q}`;
+  const html = await getHTML(searchURL, { render: false, timeoutMs: 15000 });
+  const $ = cheerio.load(html);
+  const links = new Set();
+  $('a[href*="forebet.com/en/"]').each((_, a) => {
+    const href = $(a).attr("href");
+    if (!href) return;
+    const url = href.startsWith("http") ? href : `https://www.forebet.com${href}`;
+    if (/\/en\/(football-tips|predictions|matches|match)/.test(url)) links.add(url);
+  });
+  return Array.from(links).slice(0, 2);
+}
+
+// WINDRAWWIN: /search/?q=home+away
+async function findOnWDW(home, away) {
+  const q = encodeURIComponent(`${home} ${away}`);
+  const searchURL = `https://www.windrawwin.com/search/?q=${q}`;
+  const html = await getHTML(searchURL, { render: false, timeoutMs: 15000 });
+  const $ = cheerio.load(html);
+  const links = new Set();
+  $('a[href*="windrawwin.com/"]').each((_, a) => {
+    const href = $(a).attr("href");
+    if (!href) return;
+    const url = href.startsWith("http") ? href : `https://www.windrawwin.com${href}`;
+    // pagini de meci (de obicei /matches/ sau /tips/ sau /vs/)
+    if (/windrawwin\.com\/(matches|tips|vs|fixtures|predictions)/.test(url)) links.add(url);
+  });
+  return Array.from(links).slice(0, 2);
+}
+
+// PREDICTZ: nu are căutare stabilă → fallback simplu pe home/away în sitemap (posibil să nu returneze mereu)
+async function findOnPredictZ(home, away) {
+  // încercăm /tips/ + numele echipelor (poate eșua; lăsăm ca supliment)
+  const guess = `https://www.predictz.com/search/?q=${encodeURIComponent(`${home} ${away}`)}`;
+  try {
+    const html = await getHTML(guess, { render: false, timeoutMs: 12000 });
+    const $ = cheerio.load(html);
+    const links = new Set();
+    $('a[href*="predictz.com/"]').each((_, a) => {
+      const href = $(a).attr("href");
+      if (!href) return;
+      const url = href.startsWith("http") ? href : `https://www.predictz.com${href}`;
+      if (/predictz\.com\/(predictions|tips|soccer|matches)/.test(url)) links.add(url);
+    });
+    return Array.from(links).slice(0, 2);
+  } catch {
+    return [];
   }
-  const uniq = Array.from(new Set(found));
-  const score = u => { const h=new URL(u).hostname.replace(/^www\./,""); const i=ALLOWED.findIndex(d=>h.endsWith(d)); return i===-1?99:i; };
-  return uniq.sort((a,b)=>score(a)-score(b)).slice(0,6);
+}
+
+async function autoFindSources(home, away) {
+  const h = normTeam(home);
+  const a = normTeam(away);
+  const buckets = await Promise.all([
+    findOnSportyTrader(h, a),
+    findOnForebet(h, a),
+    findOnWDW(h, a),
+    findOnPredictZ(h, a)
+  ]);
+  // păstrăm un mix: max 6 linkuri, prioritate SportyTrader/Forebet/WnD
+  const all = Array.from(new Set(buckets.flat().filter(Boolean)));
+  return all.slice(0, 6);
 }
 
 async function scrape(url) {
   try {
-    const html = await getHTML(proxyURL(url,{render:true}));
-    return { url, ok:true, proxied:true, text: cleanText(html) };
+    const html = await getHTML(url, { render: true, timeoutMs: 20000 });
+    const text = cleanText(html);
+    if (!text || text.length < 300) {
+      return { url, ok: false, proxied: true, error: "conținut insuficient (<300 chars)" };
+    }
+    return { url, ok: true, proxied: true, text };
   } catch (e) {
-    return { url, ok:false, error:String(e?.message||e) };
+    return { url, ok: false, proxied: true, error: String(e?.message || e) };
   }
 }
 
@@ -110,13 +168,13 @@ function sysPrompt() {
   ].join("\n");
 }
 
-module.exports = async (req,res)=>{
+module.exports = async (req, res) => {
   // CORS
-  res.setHeader("Access-Control-Allow-Origin","*");
-  res.setHeader("Access-Control-Allow-Methods","POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers","Content-Type");
-  if (req.method==="OPTIONS") return res.status(200).end();
-  if (req.method!=="POST") return res.status(405).json({ error: "Metoda nu este permisă" });
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Metoda nu este permisă" });
 
   const env = { hasOpenAI, hasScraper, node: process.version };
 
@@ -124,28 +182,38 @@ module.exports = async (req,res)=>{
     reqEnv("OPENAI_API_KEY");
     reqEnv("SCRAPER_API_KEY");
 
-    const body = typeof req.body === "string" ? JSON.parse(req.body||"{}") : (req.body||{});
-    const home = (body.home||"").trim();
-    const away = (body.away||"").trim();
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const home = (body.home || "").trim();
+    const away = (body.away || "").trim();
     let urls = Array.isArray(body.urls) ? body.urls.filter(Boolean) : [];
-    if (!home || !away) return res.status(400).json({ error:"Câmpurile 'home' și 'away' sunt obligatorii", env });
 
-    if (urls.length === 0) urls = await autoFindSources(home, away);
+    if (!home || !away) {
+      return res.status(400).json({ ok: false, env, error: "Câmpurile 'home' și 'away' sunt obligatorii" });
+    }
+
+    // dacă nu se trimit URL-uri manual, căutăm direct pe site-urile țintă
+    if (urls.length === 0) {
+      urls = await autoFindSources(home, away);
+    }
 
     const scraped = [];
-    for (const u of urls.slice(0,6)) scraped.push(await scrape(u));
+    for (const u of urls.slice(0, 6)) {
+      scraped.push(await scrape(u));
+    }
 
     const diagText = scraped.length
-      ? scraped.map(s => (s.ok ? "OK  (proxy) " : "FAIL ") + s.url + (s.error ? ` — ${s.error}` : "")).join("\n")
+      ? scraped.map(s => (s.ok ? "OK  (proxy) " : "FAIL (proxy) ") + s.url + (s.error ? ` — ${s.error}` : "")).join("\n")
       : "(fără)";
 
-    const srcBlock = scraped.filter(s=>s.ok && s.text)
-      .map(s=>`SRC (proxy): ${s.url}\n${s.text}`).join("\n\n---\n\n");
+    const srcBlock = scraped.filter(s => s.ok && s.text)
+      .map(s => `SRC (proxy): ${s.url}\n${s.text}`).join("\n\n---\n\n");
 
     const messages = [
-      { role:"system", content: sysPrompt() },
-      { role:"user", content:
-        `Meci: ${home} vs ${away}\n\n# DIAGNOSTIC SCRAPING\n${diagText}\n\n# TEXT EXTRAS DIN SURSE\n${srcBlock || "(niciun text disponibil)"}`
+      { role: "system", content: sysPrompt() },
+      {
+        role: "user",
+        content:
+          `Meci: ${home} vs ${away}\n\n# DIAGNOSTIC SCRAPING\n${diagText}\n\n# TEXT EXTRAS DIN SURSE\n${srcBlock || "(niciun text disponibil)"}`
       }
     ];
 
@@ -156,8 +224,8 @@ module.exports = async (req,res)=>{
     });
 
     const text = r.choices?.[0]?.message?.content || "(fără conținut)";
-    return res.status(200).json({ ok:true, env, tried: urls, scraped, result: text });
+    return res.status(200).json({ ok: true, env, tried: urls, scraped, result: text });
   } catch (e) {
-    return res.status(500).json({ ok:false, env, error: String(e?.message||e) });
+    return res.status(500).json({ ok: false, env, error: String(e?.message || e) });
   }
 };
