@@ -1,5 +1,5 @@
-// api/chat.js — Fallback garantat: dacă nu găsim linkuri, folosim chiar paginile de căutare ca surse
-// ENV necesar (Production): OPENAI_API_KEY, SCRAPER_API_KEY
+// api/chat.js — forțează ScraperAPI pe TOATE fetch-urile + retry pe 401 + DIAGNOSTIC corect (proxy)
+// ENV Production: OPENAI_API_KEY, SCRAPER_API_KEY
 
 const { OpenAI } = require("openai");
 const cheerio = require("cheerio");
@@ -23,20 +23,37 @@ function proxyURL(raw, { render=true, country="eu" } = {}){
   return u.toString();
 }
 
-async function getHTML(url, { render=true, timeoutMs=20000 } = {}){
+async function fetchViaProxy(rawUrl, { render=true, timeoutMs=20000 } = {}){
   const controller = new AbortController();
   const t = setTimeout(()=>controller.abort(), timeoutMs);
   try{
-    const res = await fetch(proxyURL(url,{render}), {
+    const res = await fetch(proxyURL(rawUrl,{render}), {
       headers:{
         "user-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
         "accept":"text/html,application/xhtml+xml"
       },
       signal: controller.signal
     });
-    if(!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.text();
+    return res;
   } finally { clearTimeout(t); }
+}
+
+async function getHTML(rawUrl, { render=true, timeoutMs=20000 } = {}){
+  // 1) încercăm cu render=render
+  let res = await fetchViaProxy(rawUrl, { render, timeoutMs });
+  // 2) dacă 401/403, reîncercăm cu opus (render toggle)
+  if (res && (res.status === 401 || res.status === 403)) {
+    const res2 = await fetchViaProxy(rawUrl, { render: !render, timeoutMs });
+    if (res2.ok) return await res2.text();
+    if (res2.status !== 401 && res2.status !== 403) {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.text();
+    }
+    // ambele 401/403
+    throw new Error(`HTTP ${res2.status}`);
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.text();
 }
 
 function cleanText(html, maxLen=24000){
@@ -65,18 +82,19 @@ function srchURLs(home, away){
 }
 
 async function pickFromSearch(searchURL, allowPattern){
-  // întoarcem până la 2 linkuri din pagina de căutare care corespund pattern-ului
+  // TOT prin proxy (getHTML)!
   const html = await getHTML(searchURL, { render:false, timeoutMs:15000 });
   const $ = cheerio.load(html);
   const links = new Set();
   $('a[href]').each((_,a)=>{
     const href = ($(a).attr("href")||"").trim();
     if(!href) return;
-    const url = href.startsWith("http") ? href :
-      (searchURL.startsWith("https://www.sportytrader.com") ? `https://www.sportytrader.com${href}` :
-       searchURL.startsWith("https://www.forebet.com") ? `https://www.forebet.com${href}` :
-       searchURL.startsWith("https://www.windrawwin.com") ? `https://www.windrawwin.com${href}` :
-       searchURL.startsWith("https://www.predictz.com") ? `https://www.predictz.com${href}` : href);
+    const base =
+      searchURL.startsWith("https://www.sportytrader.com") ? "https://www.sportytrader.com" :
+      searchURL.startsWith("https://www.forebet.com")      ? "https://www.forebet.com" :
+      searchURL.startsWith("https://www.windrawwin.com")   ? "https://www.windrawwin.com" :
+      searchURL.startsWith("https://www.predictz.com")     ? "https://www.predictz.com" : "";
+    const url = href.startsWith("http") ? href : (base ? base + href : href);
     if(allowPattern.test(url)) links.add(url);
   });
   return Array.from(links).slice(0,2);
@@ -86,7 +104,6 @@ async function autoFindSources(home, away){
   const h = norm(home), a = norm(away);
   const U = srchURLs(h,a);
 
-  // încercăm să extragem linkuri de meci din paginile de căutare
   const [st, fb, wdw, pz] = await Promise.all([
     pickFromSearch(U.st,  /sportytrader\.com\/en\/(betting-tips|predictions|match)/i).catch(()=>[]),
     pickFromSearch(U.fb,  /forebet\.com\/en\/(football-tips|predictions|matches|match)/i).catch(()=>[]),
@@ -96,17 +113,16 @@ async function autoFindSources(home, away){
 
   let urls = Array.from(new Set([...st, ...fb, ...wdw, ...pz].filter(Boolean)));
 
-  // FALLBACK GARANTAT: dacă n-am găsit linkuri, folosim chiar paginile de căutare ca surse
+  // FALLBACK: dacă nu găsim linkuri, folosim chiar paginile de căutare ca surse
   if (urls.length === 0) {
     urls = [U.st, U.fb, U.wdw, U.pz];
   }
-  // tăiem la maxim 6
   return urls.slice(0,6);
 }
 
 async function scrape(url){
   try{
-    const html = await getHTML(url, { render:true, timeoutMs:22000 });
+    const html = await getHTML(url, { render:true, timeoutMs:22000 }); // proxy enforced
     const text = cleanText(html);
     if(!text || text.length<300) return { url, ok:false, proxied:true, error:"conținut insuficient (<300 chars)" };
     return { url, ok:true, proxied:true, text };
@@ -150,12 +166,12 @@ module.exports = async (req,res)=>{
     const scraped=[];
     for(const u of urls.slice(0,6)) scraped.push(await scrape(u));
 
-    // dacă toate au FAIL și totuși avem pagini de căutare, re-scrap cu render:false (unele sunt simple)
+    // dacă toate au FAIL → încearcă din nou fără render (tot prin proxy)
     if(scraped.every(s=>!s.ok)){
       const retried=[];
       for(const u of urls.slice(0,6)){
         try{
-          const html = await getHTML(u, { render:false, timeoutMs:12000 });
+          const html = await getHTML(u, { render:false, timeoutMs:14000 });
           const text = cleanText(html);
           if(text && text.length>=300) retried.push({ url:u, ok:true, proxied:true, text });
           else retried.push({ url:u, ok:false, proxied:true, error:"conținut insuficient (<300 chars)"});
