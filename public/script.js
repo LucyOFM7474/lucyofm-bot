@@ -21,7 +21,9 @@ form.addEventListener("submit", async (e) => {
     });
     const data = await res.json();
 
-    const envTxt = data.env ? `ENV → OpenAI:${data.env.hasOpenAI ? "✓" : "✗"}  Scraper:${data.env.hasScraper ? "✓" : "✗"}  Node:${data.env.node}` : "";
+    const envTxt = data.env
+      ? `ENV → OpenAI:${data.env.hasOpenAI ? "✓" : "✗"}  Bing:${data.env.hasBing ? "✓" : "✗"}  Node:${data.env.node}`
+      : "";
 
     if (!res.ok || data.ok === false) {
       out.textContent = `${envTxt}\n\nEroare API: ${data.error || "necunoscută"}`;
@@ -29,11 +31,18 @@ form.addEventListener("submit", async (e) => {
       return;
     }
 
-    const diag = (data.scraped || [])
-      .map(s => (s.ok ? "OK  " : "FAIL ") + (s.proxied ? "(proxy) " : "") + s.url + (s.error ? " — " + s.error : ""))
-      .join("\n");
-    const header = `${envTxt}\n\n# DIAGNOSTIC SCRAPING\n${diag || "(fără)"}\n\n# ANALIZĂ\n`;
+    // când backend-ul a compus deja un text cu DIAGNOSTIC în "result", îl afișăm direct
+    if (typeof data.result === "string" && data.result.startsWith("# DIAGNOSTIC SCRAPING")) {
+      out.textContent = `${envTxt}\n\n${data.result}`;
+      setStatus("Gata ✓");
+      return;
+    }
 
+    const diag = (data.scraped || [])
+      .map(s => (s.ok ? "OK  (direct) " : "FAIL (direct) ") + s.url + (s.error ? " — " + s.error : ""))
+      .join("\n");
+
+    const header = `${envTxt}\n\n# DIAGNOSTIC SCRAPING\n${diag || "(fără)"}\n\n# ANALIZĂ\n`;
     out.textContent = header + (data.result || "(fără rezultat)");
     setStatus("Gata ✓");
   } catch (err) {
