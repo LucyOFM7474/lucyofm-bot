@@ -1,9 +1,0 @@
-{
-  "name": "LucyOFM Bot",
-  "short_name": "LucyBot",
-  "start_url": ".",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "description": "Analize meciuri GPT-5 permanent",
-  "icons": []
-}
