@@ -4,50 +4,71 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LucyOFM – Analize Meciuri</title>
-  <link rel="stylesheet" href="/public/style.css" />
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <header class="app-header">
+  <header class="container">
     <h1>LucyOFM – Analize Meciuri</h1>
-    <div class="header-actions">
-      <button id="openSettings" class="btn secondary">Setări</button>
-    </div>
+    <div class="hint">Format: <code>Gazdă – Oaspeți</code> (ex. <em>Oxford – Portsmouth</em>) sau lipiți URL-ul direct de la SportyTrader.</div>
   </header>
 
   <main class="container">
-    <section class="card">
-      <label for="matchInput" class="lbl">Meci (format „Gazdă - Oaspeți” sau slug/link)</label>
-      <div class="row">
-        <input id="matchInput" type="text" placeholder="Ex.: Club Brugge - Cercle Brugge" />
-        <button id="generateBtn" class="btn primary">Generează analiza</button>
+    <form id="matchForm" class="card">
+      <div class="grid">
+        <div class="field">
+          <label for="homeTeam">Gazdă</label>
+          <input id="homeTeam" placeholder="ex. Oxford" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="awayTeam">Oaspeți</label>
+          <input id="awayTeam" placeholder="ex. Portsmouth" autocomplete="off" />
+        </div>
       </div>
 
-      <div id="sourceButtons" class="row gap"></div>
-      <div id="sourceSummary"></div>
+      <details class="more">
+        <summary>Linkuri opționale directe (dacă le ai)</summary>
+        <div class="grid">
+          <div class="field">
+            <label for="urlSportyTrader">SportyTrader URL</label>
+            <input id="urlSportyTrader" placeholder="https://www.sportytrader.com/ro/pronosticuri/..." />
+          </div>
+          <div class="field">
+            <label for="urlForebet">Forebet URL</label>
+            <input id="urlForebet" placeholder="https://www.forebet.com/en/predictions/..." />
+          </div>
+          <div class="field">
+            <label for="urlPredictZ">PredictZ URL</label>
+            <input id="urlPredictZ" placeholder="https://www.predictz.com/predictions/..." />
+          </div>
+        </div>
+      </details>
+
+      <div class="actions">
+        <button type="submit" id="btnFetchSources" class="btn primary">Citește sursele</button>
+        <button type="button" id="btnGenerate" class="btn">Generează analiza</button>
+      </div>
+    </form>
+
+    <section class="card">
+      <h2>Surse & Linkuri</h2>
+      <div class="links">
+        <a id="linkSportyTrader" class="pill" target="_blank" rel="noopener">Deschide SportyTrader</a>
+        <a id="linkForebet" class="pill" target="_blank" rel="noopener">Deschide Forebet</a>
+        <a id="linkPredictZ" class="pill" target="_blank" rel="noopener">Deschide PredictZ</a>
+      </div>
+      <pre id="sourcesBox" class="mono dim">Nicio sursă încă. Apasă „Citește sursele”.</pre>
     </section>
 
     <section class="card">
-      <h2>Structură în 10 puncte • „De jucat”.</h2>
-      <div id="result" class="analysis"></div>
-      <div id="feedbackWrap" class="mt"></div>
+      <h2>Structură în 10 puncte – „De jucat”.</h2>
+      <pre id="resultBox" class="mono large">Nicio analiză încă. Apasă „Generează analiza”.</pre>
     </section>
   </main>
 
-  <!-- Modal Setări -->
-  <div id="settingsModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-content">
-      <div class="modal-head">
-        <h3>Setări</h3>
-        <button id="closeSettings" class="btn icon">✕</button>
-      </div>
-      <div class="modal-body">
-        <p class="muted">Afișează un exemplu de analiză în formatul standard (fundal negru, text alb, simboluri colorate):</p>
-        <button id="demoBtn" class="btn demo">Afișează analiza demo (Brugge – Cercle)</button>
-        <p class="muted small mt">Notă: Acesta este doar un exemplu vizual. Pentru analize reale folosește butonul „Generează analiza”.</p>
-      </div>
-    </div>
-  </div>
+  <footer class="container foot dim">
+    <span>Fundal negru • Text alb • Simboluri ✅ ⚠️ 📊 🎯 • Fără caractere asiatice</span>
+  </footer>
 
-  <script src="/public/script.js"></script>
+  <script src="/script.js"></script>
 </body>
 </html>
