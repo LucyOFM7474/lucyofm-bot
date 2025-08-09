@@ -8,7 +8,6 @@ const like = $("#like");
 const dislike = $("#dislike");
 const copyBtn = $("#copy");
 const feedback = $("#feedback");
-
 const LS_KEY = "lucyofm_feedback";
 
 frm.addEventListener("submit", async (e) => {
@@ -21,8 +20,10 @@ frm.addEventListener("submit", async (e) => {
   const home = $("#home").value.trim();
   const away = $("#away").value.trim();
   const when = $("#when").value.trim();
-  const urlsRaw = urlsEl.value.trim();
-  const urls = urlsRaw ? urlsRaw.split(/\n+/).map(s => s.trim()).filter(Boolean) : [];
+  const urls = (urlsEl.value.trim() || "")
+    .split(/\n+/)
+    .map(s => s.trim())
+    .filter(Boolean);
 
   try {
     const res = await fetch("/api/chat", {
@@ -35,7 +36,11 @@ frm.addEventListener("submit", async (e) => {
 
     out.textContent = data.analysis || "(fără conținut)";
     const srcList = (data.usedUrls || []).map(u => `• ${u}`).join("\n");
-    meta.textContent = `Surse folosite (${(data.usedUrls || []).length}):\n${srcList}`;
+    const srcMeta = (data.sources || []).map(s =>
+      s.ok ? `✓ ${s.source} [${s.confidence}]` : `✗ ${s.url} — ${s.error}`
+    ).join("\n");
+
+    meta.textContent = `Surse (${(data.usedUrls || []).length}):\n${srcList}\n\nStatus extrageri:\n${srcMeta}`;
   } catch (err) {
     out.textContent = `Eroare: ${String(err)}`;
   } finally {
@@ -56,11 +61,7 @@ copyBtn.addEventListener("click", async () => {
 });
 
 function saveFeedback(positive) {
-  const entry = {
-    ts: Date.now(),
-    positive,
-    sample: (out.textContent || "").slice(0, 160)
-  };
+  const entry = { ts: Date.now(), positive, sample: (out.textContent || "").slice(0, 160) };
   const arr = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
   arr.push(entry);
   localStorage.setItem(LS_KEY, JSON.stringify(arr));
