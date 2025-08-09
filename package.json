@@ -1,11 +1,9 @@
 {
   "name": "lucyofm-bot",
-  "private": true,
+  "version": "1.0.0",
   "type": "module",
-  "scripts": {
-    "dev": "vercel dev"
-  },
+  "description": "Analize meciuri sportive cu AI",
   "dependencies": {
-    "openai": "^4.58.1"
+    "openai": "^4.52.7"
   }
 }
