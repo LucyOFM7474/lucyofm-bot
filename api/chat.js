@@ -1,5 +1,5 @@
-// api/chat.js — AUTO-SEARCH + PROXY OBLIGATORIU + DIAGNOSTIC CLAR
-// ENV necesare: OPENAI_API_KEY (obligatoriu), SCRAPER_API_KEY (obligatoriu pt căutare + citire)
+// api/chat.js — Auto-search + ScraperAPI obligatoriu + DIAGNOSTIC ENV + 10 puncte
+// ENV necesare (Production): OPENAI_API_KEY, SCRAPER_API_KEY
 
 const { OpenAI } = require("openai");
 const cheerio = require("cheerio");
@@ -7,14 +7,17 @@ const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const ALLOWED = ["sportytrader.com","predictz.com","forebet.com","windrawwin.com"];
 
-function requireEnv(name) {
+const hasOpenAI = !!process.env.OPENAI_API_KEY;
+const hasScraper = !!process.env.SCRAPER_API_KEY;
+
+function must(name) {
   const v = process.env[name];
-  if (!v) throw new Error(`Lipsește ${name} în Vercel (Production)`);
+  if (!v) throw new Error(`ENV lipsă: ${name} (setați în Vercel → Settings → Environment Variables → Production)`);
   return v;
 }
 
 function proxyURL(raw, opts = {}) {
-  const key = requireEnv("SCRAPER_API_KEY");
+  const key = must("SCRAPER_API_KEY");
   const u = new URL("https://api.scraperapi.com/");
   u.searchParams.set("api_key", key);
   u.searchParams.set("url", raw);
@@ -52,7 +55,6 @@ function cleanText(html, maxLen = 22000) {
   return text;
 }
 
-// ---- căutare (prin proxy) ----
 function ddgQuery(q){ const u=new URL("https://duckduckgo.com/html/"); u.searchParams.set("q",q); return u.toString(); }
 function googleQuery(q){ const u=new URL("https://www.google.com/search"); u.searchParams.set("q",q); u.searchParams.set("hl","en"); return u.toString(); }
 function isAllowed(u){ try{ const h=new URL(u).hostname.replace(/^www\./,""); return ALLOWED.some(d=>h.endsWith(d)); }catch{ return false; } }
@@ -65,7 +67,9 @@ async function searchEngine(url){
   // DuckDuckGo
   $(".result__a, a.result__a").each((_,a)=>{ const href=$(a).attr("href"); if(href?.startsWith("http") && isAllowed(href)) links.push(href); });
   // Google fallback
-  if(links.length===0){ $("a").each((_,a)=>{ const raw=$(a).attr("href")||""; const href=normalizeGoogleHref(raw); if(href.startsWith("http") && isAllowed(href)) links.push(href); }); }
+  if(links.length===0){
+    $("a").each((_,a)=>{ const raw=$(a).attr("href")||""; const href=normalizeGoogleHref(raw); if(href.startsWith("http") && isAllowed(href)) links.push(href); });
+  }
   return Array.from(new Set(links)).slice(0,6);
 }
 
@@ -87,10 +91,9 @@ async function autoFindSources(home,away){
         const gg = await searchEngine(googleQuery(q));
         found = found.concat(gg);
       }
-    }catch(_){}
+    }catch(e){ /* ignoră */ }
     if(found.length>=6) break;
   }
-  // prioritar domeniile ALLOWED
   const uniq = Array.from(new Set(found));
   const score = u => { const h=new URL(u).hostname.replace(/^www\./,""); const i=ALLOWED.findIndex(d=>h.endsWith(d)); return i===-1?99:i; };
   return uniq.sort((a,b)=>score(a)-score(b)).slice(0,6);
@@ -122,15 +125,19 @@ module.exports = async (req,res)=>{
   if(req.method==="OPTIONS") return res.status(200).end();
   if(req.method!=="POST") return res.status(405).json({error:"Metoda nu este permisă"});
 
+  // DIAGNOSTIC ENV în răspuns
+  const envDiag = { hasOpenAI, hasScraper, node: process.version };
+
   try{
-    requireEnv("OPENAI_API_KEY");
+    must("OPENAI_API_KEY");
+    must("SCRAPER_API_KEY");
+
     const body = typeof req.body==="string" ? JSON.parse(req.body||"{}") : (req.body||{});
     const home=(body.home||"").trim(); const away=(body.away||"").trim();
     let urls = Array.isArray(body.urls)? body.urls.filter(Boolean): [];
-    if(!home || !away) return res.status(400).json({error:"Câmpurile 'home' și 'away' sunt obligatorii"});
+    if(!home || !away) return res.status(400).json({error:"Câmpurile 'home' și 'away' sunt obligatorii", env: envDiag});
 
     if(urls.length===0){
-      // găsește singur
       urls = await autoFindSources(home,away);
     }
 
@@ -158,10 +165,10 @@ module.exports = async (req,res)=>{
     });
 
     const text = r.choices?.[0]?.message?.content || "(fără conținut)";
-    return res.status(200).json({ ok:true, tried: urls, scraped, result: text });
+    return res.status(200).json({ ok:true, env: envDiag, tried: urls, scraped, result: text });
   }catch(e){
-    // dacă lipsește SCRAPER_API_KEY / alte ENV, vezi clar aici
     console.error("Eroare:", e);
-    return res.status(500).json({ error: String(e?.message||e) });
+    // expune diagnostic ENV și eroarea clar în răspuns
+    return res.status(500).json({ error: String(e?.message||e), env: envDiag });
   }
 };
