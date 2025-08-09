@@ -1,53 +1,74 @@
+// api/chat.js
 import { OpenAI } from "openai";
+import { MongoClient } from "mongodb";
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-const systemPrompt = `
-Ești **LucyOFM Bot**, analist profesionist român.  
-Returnează **10 puncte clare și numerotate**, cu simboluri:
-
-✅  consens surse  
-⚠️  atenție  
-📊  statistică cheie  
-🎯  pariu recomandat  
-
-Structura fixă:
-1. Cote & predicții externe live (SportyTrader, PredictZ, WinDrawWin, Forebet, SportsGambler)
-2. H2H ultimele 5 directe
-3. Forma gazdelor (acasă)
-4. Forma oaspeților (deplasare)
-5. Clasament & motivație
-6. GG & BTTS – procente recente
-7. Cornere, posesie, galbene – medii
-8. Jucători-cheie / absențe / lot actual
-9. Predicție scor exact
-10. Recomandări pariuri (✅ solist, 💰 valoare, 🎯 surpriză, ⚽ goluri, 🚩 cornere)
-
-Folosește culori și emoji-uri pentru claritate.
-`;
+const mongoUri = process.env.MONGODB_URI;
+const client = new MongoClient(mongoUri, { serverSelectionTimeoutMS: 8000 });
 
 export default async function handler(req, res) {
+  // CORS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Metoda nu este permisă" });
   }
 
-  const { prompt } = req.body;
-  if (!prompt?.trim()) {
-    return res.status(400).json({ error: "Introdu un meci valid" });
-  }
-
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
-      ],
-      max_tokens: 900,
-      temperature: 0.7,
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const { prompt = "" } = body;
+
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: "Lipsește OPENAI_API_KEY" });
+    }
+    if (!process.env.MONGODB_URI) {
+      return res.status(500).json({ error: "Lipsește MONGODB_URI" });
+    }
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({ error: "Câmpul 'prompt' este obligatoriu" });
+    }
+
+    // Conectare + salvare istoric minim
+    await client.connect();
+    const db = client.db("lucyofm");
+    const istoric = db.collection("istoric");
+    await istoric.insertOne({
+      meci: prompt,
+      data: new Date(),
+      ip: req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown"
     });
-    res.status(200).json({ reply: completion.choices[0].message.content });
+
+    // Apel OpenAI (model la alegere; poți schimba cu gpt-4o)
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Ești un asistent pentru analiză de meciuri, răspunzi concis, în 10 puncte, cu ✅⚠️📊🎯."
+        },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.4
+    });
+
+    const text = completion.choices?.[0]?.message?.content ?? "";
+
+    // Logging extins (bonus cerut)
+    try {
+      console.log("Analiză completată pentru:", prompt.substring(0, 50));
+      if (completion.usage?.total_tokens != null) {
+        console.log("Cost estimat:", completion.usage.total_tokens + " tokeni");
+      }
+    } catch (_) {}
+
+    return res.status(200).json({ ok: true, result: text });
   } catch (err) {
-    console.error("Eroare OpenAI:", err.message);
-    res.status(500).json({ error: "Eroare la procesarea cererii." });
+    console.error("Eroare:", err);
+    return res.status(500).json({ error: err?.message || "Eroare internă" });
+  } finally {
+    try { await client.close(); } catch (_) {}
   }
 }
