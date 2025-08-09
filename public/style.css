@@ -1,70 +1,24 @@
-/* public/style.css — dark UI compact */
-:root{
-  --bg:#0b0f14;
-  --card:#141a22;
-  --text:#e9eef5;
-  --muted:#a8b3c1;
-  --pri:#2e7dd7;
-  --ok:#22c55e;
-  --warn:#eab308;
-  --accent:#ef4444;
-  --chip:#1f2937;
-  --border:#243041;
-}
+:root { --bg:#0b0d10; --card:#151922; --text:#f2f5f9; --muted:#9aa4b2; --accent:#4da3ff; --pill:#263043; --ok:#22c55e; --warn:#fbbf24; --chart:#60a5fa; --aim:#ef4444; }
 *{box-sizing:border-box}
 html,body{height:100%}
-body{
-  margin:0; background:var(--bg); color:var(--text);
-  font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;
-}
-h1,h2,h3{margin:.2rem 0 1rem}
-h1{font-size:20px}
-h2{font-size:16px}
-.container{max-width:920px; margin:20px auto; padding:0 12px}
-.app-header{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:12px 16px; border-bottom:1px solid var(--border); background:rgba(0,0,0,.2)
-}
-.card{
-  background:var(--card); border:1px solid var(--border);
-  border-radius:14px; padding:14px; margin:12px 0; box-shadow:0 6px 18px rgba(0,0,0,.25)
-}
-.lbl{display:block; color:var(--muted); margin-bottom:6px}
-.row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-.row.gap{gap:8px; margin-top:10px}
-input[type=text]{
-  flex:1; min-width:260px; padding:10px 12px; border-radius:10px;
-  border:1px solid var(--border); background:#0f141b; color:var(--text);
-}
-.btn{
-  border:1px solid var(--border); border-radius:10px; padding:10px 12px;
-  background:var(--chip); color:#fff; cursor:pointer;
-}
-.btn.primary{background:var(--pri)}
-.btn.secondary{background:#334155}
-.btn.icon{padding:6px 10px}
-.btn.demo{background:#1f2937}
-.btn:disabled{opacity:.6; cursor:not-allowed}
-.mt{margin-top:10px}
-.muted{color:var(--muted)}
-.small{font-size:12px}
-
-/* Analysis text */
-.analysis{white-space:pre-wrap; color:#fff}
-.analysis .ok{color:var(--ok); font-weight:600}
-.analysis .warn{color:var(--warn); font-weight:600}
-.analysis .stat{color:#60a5fa; font-weight:600}
-.analysis .reco{color:var(--accent); font-weight:600}
-.analysis div{margin:.25rem 0}
-
-/* Modal */
-.modal{
-  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-  background:rgba(0,0,0,.55); z-index:50;
-}
-.modal.hidden{display:none}
-.modal-content{
-  background:var(--card); border:1px solid var(--border); border-radius:14px;
-  width:min(560px,92%); padding:14px;
-}
-.modal-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:8px}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,'Helvetica Neue','Noto Sans',sans-serif}
+.container{max-width:980px;margin:0 auto;padding:16px}
+h1{margin:12px 0 6px;font-size:28px;font-weight:700}
+h2{margin:0 0 10px;font-size:18px}
+.hint,.dim{color:var(--muted)}
+.card{background:var(--card);border:1px solid #1f2532;border-radius:14px;padding:14px;margin:12px 0;box-shadow:0 6px 16px rgba(0,0,0,.25)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field label{display:block;margin-bottom:6px;color:var(--muted);font-size:13px}
+input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2a3142;background:#0f141b;color:var(--text);outline:none}
+input:focus{border-color:var(--accent)}
+details.more summary{cursor:pointer;color:var(--accent);margin-bottom:10px}
+.actions{display:flex;gap:10px;margin-top:10px}
+.btn{background:#263043;color:#eaf2ff;border:1px solid #33405a;border-radius:10px;padding:10px 14px;cursor:pointer}
+.btn.primary{background:#245eb8;border-color:#2b6ad0}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.links{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.pill{display:inline-block;background:var(--pill);color:#eaf2ff;border:1px solid #33405a;border-radius:999px;padding:8px 12px;text-decoration:none}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;white-space:pre-wrap}
+.mono.large{font-size:15px}
+pre{margin:0;background:#0f141b;border:1px solid #1f2532;border-radius:10px;padding:12px;min-height:90px}
+.foot{opacity:.7;font-size:13px;text-align:center}
