@@ -18,10 +18,10 @@ form { background: var(--panel); border: 1px solid var(--border); padding: 12px;
 .row { display: grid; grid-template-columns: 160px 1fr; gap: 10px; align-items: center; margin: 8px 0; }
 label { color: var(--muted); }
 input, textarea { width: 100%; background: #0e0e0e; color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
-textarea { min-height: 84px; resize: vertical; }
+textarea { min-height: 96px; resize: vertical; }
 button { appearance: none; border: 0; padding: 10px 14px; border-radius: 10px; cursor: pointer; background: var(--accent); color: #fff; font-weight: 600; }
 button:disabled { opacity: 0.6; cursor: not-allowed; }
 .panel { margin-top: 16px; background: var(--panel); border: 1px solid var(--border); padding: 16px; border-radius: 12px; white-space: pre-wrap; }
 .muted { color: var(--muted); margin-top: 10px; }
-#meta { margin-top: 10px; color: var(--muted); font-size: 13px; }
+#meta { margin-top: 10px; color: var(--muted); font-size: 13px; white-space: pre-wrap; }
 .actions { display: flex; gap: 10px; margin-top: 10px; }
