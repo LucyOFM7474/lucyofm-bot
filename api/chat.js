@@ -1,218 +1,194 @@
-// api/chat.js — Auto-căutare cu Bing Web Search (fără proxy), scraping direct, DIAGNOSTIC clar
-// ENV (Production): OPENAI_API_KEY, BING_API_KEY
-// Runtime: Node 22 (CJS)
-
-module.exports.config = { runtime: "nodejs22.x" };
+// api/chat.js — Fallback garantat: dacă nu găsim linkuri, folosim chiar paginile de căutare ca surse
+// ENV necesar (Production): OPENAI_API_KEY, SCRAPER_API_KEY
 
 const { OpenAI } = require("openai");
 const cheerio = require("cheerio");
-
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-function reqEnv(name) {
+function reqEnv(name){
   const v = process.env[name];
-  if (!v) throw new Error(`ENV lipsă: ${name} (setează în Vercel → Settings → Environment Variables → PRODUCTION)`);
+  if(!v) throw new Error(`ENV lipsă: ${name} (setează în Vercel → Settings → Environment Variables → PRODUCTION)`);
   return v;
 }
+const hasOpenAI = !!process.env.OPENAI_API_KEY;
+const hasScraper = !!process.env.SCRAPER_API_KEY;
 
-const UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
-const ALLOWED = ["sportytrader.com", "predictz.com", "forebet.com", "windrawwin.com"];
-
-function isAllowed(u) {
-  try {
-    const h = new URL(u).hostname.replace(/^www\./, "");
-    return ALLOWED.some((d) => h.endsWith(d));
-  } catch {
-    return false;
-  }
+function proxyURL(raw, { render=true, country="eu" } = {}){
+  const key = reqEnv("SCRAPER_API_KEY");
+  const u = new URL("https://api.scraperapi.com/");
+  u.searchParams.set("api_key", key);
+  u.searchParams.set("url", raw);
+  u.searchParams.set("render", String(render));
+  u.searchParams.set("country_code", country);
+  return u.toString();
 }
 
-async function getHTML(url, timeoutMs = 16000) {
+async function getHTML(url, { render=true, timeoutMs=20000 } = {}){
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "user-agent": UA,
-        accept: "text/html,application/xhtml+xml",
-        "accept-language": "en-US,en;q=0.9,ro;q=0.8",
-        "cache-control": "no-cache",
-        pragma: "no-cache",
-        "upgrade-insecure-requests": "1",
+  const t = setTimeout(()=>controller.abort(), timeoutMs);
+  try{
+    const res = await fetch(proxyURL(url,{render}), {
+      headers:{
+        "user-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+        "accept":"text/html,application/xhtml+xml"
       },
-      redirect: "follow",
-      signal: controller.signal,
+      signal: controller.signal
     });
-    const text = await res.text().catch(() => "");
-    if (!res.ok) throw new Error(`HTTP ${res.status}${text ? " — " + text.slice(0, 200) : ""}`);
-    return text;
-  } finally {
-    clearTimeout(t);
-  }
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  } finally { clearTimeout(t); }
 }
 
-function cleanText(html, maxLen = 22000) {
+function cleanText(html, maxLen=24000){
   const $ = cheerio.load(html);
-  ["script", "style", "noscript", "nav", "footer", "header", "aside"].forEach((s) => $(s).remove());
-  const parts = [];
-  $("h1,h2,h3,h4,p,li,td,th").each((_, el) => {
-    const t = $(el).text().replace(/\s+/g, " ").trim();
-    if (t && t.length > 30) parts.push(t);
+  ["script","style","noscript","nav","footer","header","aside"].forEach(s => $(s).remove());
+  const parts=[];
+  $("h1,h2,h3,h4,p,li,td,th").each((_,el)=>{
+    const t=$(el).text().replace(/\s+/g," ").trim();
+    if(t && t.length>30) parts.push(t);
   });
-  let text = parts.join("\n");
-  if (text.length > maxLen) text = text.slice(0, maxLen);
+  let text=parts.join("\n");
+  if(text.length>maxLen) text=text.slice(0,maxLen);
   return text;
 }
 
-/** --- Căutare cu Bing Web Search --- */
-async function bingSearch(query, count = 20, mkt = "en-US") {
-  const key = reqEnv("BING_API_KEY");
-  const u = new URL("https://api.bing.microsoft.com/v7.0/search");
-  u.searchParams.set("q", query);
-  u.searchParams.set("mkt", mkt);
-  u.searchParams.set("count", String(count));
-  u.searchParams.set("safeSearch", "Off");
+const norm = s => (s||"").toLowerCase().replace(/\s+/g," ").trim();
 
-  const res = await fetch(u.toString(), {
-    headers: { "Ocp-Apim-Subscription-Key": key },
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = json?.message || json?._type || JSON.stringify(json).slice(0, 200);
-    throw new Error(`Bing ${res.status} — ${msg}`);
-  }
-  const items = json?.webPages?.value || [];
-  const urls = items.map((it) => it.url).filter((u) => typeof u === "string");
-  return Array.from(new Set(urls)).filter(isAllowed);
-}
-
-async function autoFindSources(home, away) {
-  const base = `${home} vs ${away} prediction`;
-  const queries = [
-    `site:sportytrader.com ${base}`,
-    `site:forebet.com ${base}`,
-    `site:windrawwin.com ${base}`,
-    `site:predictz.com ${base}`,
-    base,
-  ];
-
-  let found = [];
-  for (const q of queries) {
-    try {
-      const got = await bingSearch(q, 20, "en-US");
-      found = found.concat(got);
-      if (found.length >= 6) break;
-    } catch {
-      // continuăm cu următoarea interogare
-    }
-  }
-  // prioritate pe ordinea din ALLOWED
-  const score = (u) => {
-    try {
-      const h = new URL(u).hostname.replace(/^www\./, "");
-      const i = ALLOWED.findIndex((d) => h.endsWith(d));
-      return i === -1 ? 99 : i;
-    } catch {
-      return 99;
-    }
+function srchURLs(home, away){
+  const q = encodeURIComponent(`${home} ${away}`);
+  return {
+    st: `https://www.sportytrader.com/en/search/?q=${q}`,
+    fb: `https://www.forebet.com/en/search?query=${q}`,
+    wdw:`https://www.windrawwin.com/search/?q=${q}`,
+    pz: `https://www.predictz.com/search/?q=${q}`
   };
-  const uniq = Array.from(new Set(found));
-  return uniq.sort((a, b) => score(a) - score(b)).slice(0, 6);
 }
 
-/** --- Scraping direct --- */
-async function scrape(url) {
-  try {
-    const html = await getHTML(url, 18000);
+async function pickFromSearch(searchURL, allowPattern){
+  // întoarcem până la 2 linkuri din pagina de căutare care corespund pattern-ului
+  const html = await getHTML(searchURL, { render:false, timeoutMs:15000 });
+  const $ = cheerio.load(html);
+  const links = new Set();
+  $('a[href]').each((_,a)=>{
+    const href = ($(a).attr("href")||"").trim();
+    if(!href) return;
+    const url = href.startsWith("http") ? href :
+      (searchURL.startsWith("https://www.sportytrader.com") ? `https://www.sportytrader.com${href}` :
+       searchURL.startsWith("https://www.forebet.com") ? `https://www.forebet.com${href}` :
+       searchURL.startsWith("https://www.windrawwin.com") ? `https://www.windrawwin.com${href}` :
+       searchURL.startsWith("https://www.predictz.com") ? `https://www.predictz.com${href}` : href);
+    if(allowPattern.test(url)) links.add(url);
+  });
+  return Array.from(links).slice(0,2);
+}
+
+async function autoFindSources(home, away){
+  const h = norm(home), a = norm(away);
+  const U = srchURLs(h,a);
+
+  // încercăm să extragem linkuri de meci din paginile de căutare
+  const [st, fb, wdw, pz] = await Promise.all([
+    pickFromSearch(U.st,  /sportytrader\.com\/en\/(betting-tips|predictions|match)/i).catch(()=>[]),
+    pickFromSearch(U.fb,  /forebet\.com\/en\/(football-tips|predictions|matches|match)/i).catch(()=>[]),
+    pickFromSearch(U.wdw, /windrawwin\.com\/(matches|tips|vs|fixtures|predictions)/i).catch(()=>[]),
+    pickFromSearch(U.pz,  /predictz\.com\/(predictions|tips|soccer|matches)/i).catch(()=>[])
+  ]);
+
+  let urls = Array.from(new Set([...st, ...fb, ...wdw, ...pz].filter(Boolean)));
+
+  // FALLBACK GARANTAT: dacă n-am găsit linkuri, folosim chiar paginile de căutare ca surse
+  if (urls.length === 0) {
+    urls = [U.st, U.fb, U.wdw, U.pz];
+  }
+  // tăiem la maxim 6
+  return urls.slice(0,6);
+}
+
+async function scrape(url){
+  try{
+    const html = await getHTML(url, { render:true, timeoutMs:22000 });
     const text = cleanText(html);
-    if (!text || text.length < 300) return { url, ok: false, direct: true, error: "conținut insuficient (<300 chars)" };
-    return { url, ok: true, direct: true, text };
-  } catch (e) {
-    return { url, ok: false, direct: true, error: String(e?.message || e) };
+    if(!text || text.length<300) return { url, ok:false, proxied:true, error:"conținut insuficient (<300 chars)" };
+    return { url, ok:true, proxied:true, text };
+  }catch(e){
+    return { url, ok:false, proxied:true, error:String(e?.message||e) };
   }
 }
 
-function sysPrompt() {
+function sysPrompt(){
   return [
     "Ești botul LucyOFM – Analize meciuri.",
     "FORMAT: 10 puncte cu ✅ ⚠️ 📊 🎯. Fără caractere asiatice. Fără cuvântul «Simbol». Ton ferm, concis.",
     "Nu inventa; folosește DOAR textul extras. Dacă sursele se contrazic, marchează cu ⚠️.",
     "Început: ce spune fiecare sursă (✅ dacă ≥3 coincid). Final: 3–5 recomandări 🎯, fiecare pe linie.",
-    "Dacă n-ai text din surse: «Date insuficiente din surse – analiză bazată pe model».",
+    "Dacă n-ai text din surse: «Date insuficiente din surse – analiză bazată pe model»."
   ].join("\n");
 }
 
-module.exports = async (req, res) => {
+module.exports = async (req,res)=>{
   // CORS
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Metoda nu este permisă" });
+  res.setHeader("Access-Control-Allow-Origin","*");
+  res.setHeader("Access-Control-Allow-Methods","POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers","Content-Type");
+  if(req.method==="OPTIONS") return res.status(200).end();
+  if(req.method!=="POST") return res.status(405).json({ error:"Metoda nu este permisă" });
 
-  const env = {
-    hasOpenAI: !!process.env.OPENAI_API_KEY,
-    hasBing: !!process.env.BING_API_KEY,
-    node: process.version,
-  };
+  const env = { hasOpenAI, hasScraper, node: process.version };
 
-  try {
+  try{
     reqEnv("OPENAI_API_KEY");
-    reqEnv("BING_API_KEY");
+    reqEnv("SCRAPER_API_KEY");
 
-    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
-    const home = (body.home || "").trim();
-    const away = (body.away || "").trim();
+    const body = typeof req.body==="string" ? JSON.parse(req.body||"{}") : (req.body||{});
+    const home = (body.home||"").trim();
+    const away = (body.away||"").trim();
     let urls = Array.isArray(body.urls) ? body.urls.filter(Boolean) : [];
+    if(!home || !away) return res.status(400).json({ ok:false, env, error:"Câmpurile 'home' și 'away' sunt obligatorii" });
 
-    if (!home || !away) {
-      return res.status(400).json({ ok: false, env, error: "Câmpurile 'home' și 'away' sunt obligatorii" });
+    if(urls.length===0) urls = await autoFindSources(home, away);
+
+    const scraped=[];
+    for(const u of urls.slice(0,6)) scraped.push(await scrape(u));
+
+    // dacă toate au FAIL și totuși avem pagini de căutare, re-scrap cu render:false (unele sunt simple)
+    if(scraped.every(s=>!s.ok)){
+      const retried=[];
+      for(const u of urls.slice(0,6)){
+        try{
+          const html = await getHTML(u, { render:false, timeoutMs:12000 });
+          const text = cleanText(html);
+          if(text && text.length>=300) retried.push({ url:u, ok:true, proxied:true, text });
+          else retried.push({ url:u, ok:false, proxied:true, error:"conținut insuficient (<300 chars)"});
+        }catch(e){
+          retried.push({ url:u, ok:false, proxied:true, error:String(e?.message||e) });
+        }
+      }
+      scraped.splice(0, scraped.length, ...retried);
     }
 
-    if (urls.length === 0) urls = await autoFindSources(home, away);
-
-    const scraped = [];
-    for (const u of urls.slice(0, 6)) scraped.push(await scrape(u));
-
-    const diag = scraped.length
-      ? scraped
-          .map((s) => (s.ok ? "OK  (direct) " : "FAIL (direct) ") + s.url + (s.error ? ` — ${s.error}` : ""))
-          .join("\n")
+    const diagText = scraped.length
+      ? scraped.map(s => (s.ok ? "OK  (proxy) " : "FAIL (proxy) ") + s.url + (s.error ? ` — ${s.error}` : "")).join("\n")
       : "(fără)";
 
-    const srcBlock = scraped
-      .filter((s) => s.ok && s.text)
-      .map((s) => `SRC (direct): ${s.url}\n${s.text}`)
-      .join("\n\n---\n\n");
-
-    if (!srcBlock) {
-      return res.status(200).json({
-        ok: true,
-        env,
-        tried: urls,
-        scraped,
-        result: `# DIAGNOSTIC SCRAPING\n${diag}\n\n# ANALIZĂ\nDate insuficiente din surse – analiză bazată pe model.`,
-      });
-    }
+    const srcBlock = scraped.filter(s=>s.ok && s.text)
+      .map(s=>`SRC (proxy): ${s.url}\n${s.text}`).join("\n\n---\n\n");
 
     const messages = [
-      { role: "system", content: sysPrompt() },
-      {
-        role: "user",
-        content: `Meci: ${home} vs ${away}\n\n# DIAGNOSTIC SCRAPING\n${diag}\n\n# TEXT EXTRAS DIN SURSE\n${srcBlock}`,
-      },
+      { role:"system", content: sysPrompt() },
+      { role:"user", content:
+        `Meci: ${home} vs ${away}\n\n# DIAGNOSTIC SCRAPING\n${diagText}\n\n# TEXT EXTRAS DIN SURSE\n${srcBlock || "(niciun text disponibil)"}`
+      }
     ];
 
     const r = await client.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.2,
-      messages,
+      messages
     });
 
     const text = r.choices?.[0]?.message?.content || "(fără conținut)";
-    return res.status(200).json({ ok: true, env, tried: urls, scraped, result: text });
-  } catch (e) {
-    return res.status(500).json({ ok: false, env, error: String(e?.message || e) });
+    return res.status(200).json({ ok:true, env, tried: urls, scraped, result: text });
+  }catch(e){
+    return res.status(500).json({ ok:false, env, error:String(e?.message||e) });
   }
 };
