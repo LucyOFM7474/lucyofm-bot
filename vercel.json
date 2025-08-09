@@ -1,8 +1,14 @@
 {
   "version": 2,
   "functions": {
-    "api/**/*.js": {
-      "runtime": "nodejs20.x"
+    "api/*.js": {
+      "runtime": "nodejs20.x",
+      "memory": 512,
+      "maxDuration": 20
     }
-  }
+  },
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/(.*)", "dest": "/public/index.html" }
+  ]
 }
