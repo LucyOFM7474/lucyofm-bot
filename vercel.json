@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "routes": [
-    { "src": "/", "dest": "/public/index.html" },
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/public/$1" }
-  ]
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs20.x"
+    }
+  }
 }
