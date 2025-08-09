@@ -1,68 +1,68 @@
-// public/script.js — un singur câmp + un singur buton.
-// Face totul într-un pas: parsează inputul, citește sursele, apoi cere analiza.
+const $ = (s) => document.querySelector(s);
+const frm = $("#frm");
+const out = $("#out");
+const meta = $("#meta");
+const btn = $("#go");
+const urlsEl = $("#urls");
+const like = $("#like");
+const dislike = $("#dislike");
+const copyBtn = $("#copy");
+const feedback = $("#feedback");
 
-function $(id){return document.getElementById(id)}
-const qEl = $("query");
-const btn = $("btnGenerate");
-const out = $("resultBox");
+const LS_KEY = "lucyofm_feedback";
 
-function setBusy(b){
-  btn.disabled = b;
-  btn.textContent = b ? "Generez…" : "Generează analiza";
-}
+frm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  btn.disabled = true;
+  out.textContent = "Se generează analiza...";
+  meta.textContent = "";
+  feedback.textContent = "";
 
-// Împarte "Gazdă – Oaspeți" / "Gazdă - Oaspeți" / "Gazdă vs Oaspeți"
-function splitTeams(text){
-  const s = (text||"").trim();
-  const sep = /\s*(?:-|–|—|vs|VS)\s*/;
-  const parts = s.split(sep).map(x=>x.trim()).filter(Boolean);
-  if (parts.length >= 2) return { homeTeam: parts[0], awayTeam: parts[1] };
-  return null;
-}
+  const home = $("#home").value.trim();
+  const away = $("#away").value.trim();
+  const when = $("#when").value.trim();
+  const urlsRaw = urlsEl.value.trim();
+  const urls = urlsRaw ? urlsRaw.split(/\n+/).map(s => s.trim()).filter(Boolean) : [];
 
-async function post(path, body){
-  const res = await fetch(path, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body||{}) });
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
-}
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ home, away, when, urls })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || "Eroare API");
 
-async function generate(){
-  const raw = (qEl.value||"").trim();
-  if(!raw){ alert("Scrie meciul sau lipește URL-ul."); return; }
-
-  // 1) Dacă e URL SportyTrader, îl trimitem ca atare; altfel parsează echipele
-  const urls = {};
-  let homeTeam = "", awayTeam = "";
-
-  if (/^https?:\/\//i.test(raw) && /sportytrader\.com/i.test(raw)) {
-    urls.sportytrader = raw;
-    out.textContent = "Citesc pagina SportyTrader…";
-    // În lipsa numelor, trecem ceva generic; /api/fetchSources le poate deduce din titlu
-    homeTeam = "Gazda";
-    awayTeam = "Oaspeții";
-  } else {
-    const pair = splitTeams(raw);
-    if (!pair) { alert("Format invalid. Exemplu: Oxford – Portsmouth"); return; }
-    homeTeam = pair.homeTeam;
-    awayTeam = pair.awayTeam;
+    out.textContent = data.analysis || "(fără conținut)";
+    const srcList = (data.usedUrls || []).map(u => `• ${u}`).join("\n");
+    meta.textContent = `Surse folosite (${(data.usedUrls || []).length}):\n${srcList}`;
+  } catch (err) {
+    out.textContent = `Eroare: ${String(err)}`;
+  } finally {
+    btn.disabled = false;
   }
+});
 
-  try{
-    setBusy(true);
-    out.textContent = "Citesc sursele și generez analiza…";
+like.addEventListener("click", () => saveFeedback(true));
+dislike.addEventListener("click", () => saveFeedback(false));
 
-    // 2) Cerem analiza direct (chat.js va apela fetchSources și va insera textual predicțiile în punctul 1)
-    const data = await post("/api/chat", { homeTeam, awayTeam, urls });
-
-    if (!data?.ok) throw new Error(data?.error || "Eșec API");
-    out.textContent = data.analysis || "Date indisponibile";
-  }catch(e){
-    console.error(e);
-    out.textContent = "Eroare la generare. Verifică cheile și încearcă din nou.";
-  }finally{
-    setBusy(false);
+copyBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(out.textContent || "");
+    feedback.textContent = "Analiza a fost copiată în clipboard.";
+  } catch {
+    feedback.textContent = "Nu am putut copia conținutul.";
   }
-}
+});
 
-btn?.addEventListener("click", (e)=>{ e.preventDefault(); generate(); });
-qEl?.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ e.preventDefault(); generate(); }});
+function saveFeedback(positive) {
+  const entry = {
+    ts: Date.now(),
+    positive,
+    sample: (out.textContent || "").slice(0, 160)
+  };
+  const arr = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+  arr.push(entry);
+  localStorage.setItem(LS_KEY, JSON.stringify(arr));
+  feedback.textContent = positive ? "Feedback salvat: 👍" : "Feedback salvat: 👎";
+}
