@@ -1,7 +1,14 @@
 {
   "name": "lucyofm-bot",
+  "private": true,
+  "version": "1.0.0",
   "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "echo \"no build\""
+  },
   "dependencies": {
-    "openai": "^4.61.0"
+    "axios": "^1.7.5",
+    "cheerio": "^1.0.0-rc.12"
   }
 }
