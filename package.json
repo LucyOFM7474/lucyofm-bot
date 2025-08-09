@@ -1,9 +1,12 @@
 {
   "name": "lucyofm-bot",
-  "version": "1.0.0",
   "type": "module",
-  "description": "Analize meciuri sportive cu AI",
+  "private": true,
   "dependencies": {
+    "mongodb": "^6.5.0",
     "openai": "^4.52.7"
+  },
+  "engines": {
+    "node": ">=18.x"
   }
 }
