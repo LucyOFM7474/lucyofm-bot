@@ -1,69 +1,59 @@
-const $ = (s) => document.querySelector(s);
-const frm = $("#frm");
-const out = $("#out");
-const meta = $("#meta");
-const btn = $("#go");
-const urlsEl = $("#urls");
-const like = $("#like");
-const dislike = $("#dislike");
-const copyBtn = $("#copy");
-const feedback = $("#feedback");
-const LS_KEY = "lucyofm_feedback";
+function salveazaIstoric(meci, rezultat) {
+  let istoric = JSON.parse(localStorage.getItem("lucyofm_istoric") || "[]");
+  istoric.unshift({ meci, rezultat, data: new Date().toLocaleString("ro-RO") });
+  localStorage.setItem("lucyofm_istoric", JSON.stringify(istoric.slice(0, 20)));
+  afiseazaIstoric();
+}
 
-frm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  btn.disabled = true;
-  out.textContent = "Se generează analiza...";
-  meta.textContent = "";
-  feedback.textContent = "";
+function stergeIstoric() {
+  if (confirm("Sigur vrei să ștergi tot istoricul?")) {
+    localStorage.removeItem("lucyofm_istoric");
+    afiseazaIstoric();
+  }
+}
 
-  const home = $("#home").value.trim();
-  const away = $("#away").value.trim();
-  const when = $("#when").value.trim();
-  const urls = (urlsEl.value.trim() || "")
-    .split(/\n+/)
-    .map(s => s.trim())
-    .filter(Boolean);
+function afiseazaIstoric() {
+  const istoric = JSON.parse(localStorage.getItem("lucyofm_istoric") || "[]");
+  const container = document.getElementById("istoric-list");
+  
+  if (istoric.length === 0) {
+    container.innerHTML = "<p style='opacity:0.7'>Nu există analize salvate</p>";
+    return;
+  }
+  
+  container.innerHTML = istoric.map(item => `
+    <div class="istoric-item" onclick="incarcaAnaliza('${item.meci}')">
+      <strong>${item.meci}</strong>
+      <small>${item.data}</small>
+    </div>
+  `).join("");
+}
+
+function incarcaAnaliza(meci) {
+  document.getElementById("prompt").value = meci;
+  document.getElementById("rezultat").scrollIntoView({ behavior: 'smooth' });
+}
+
+async function analizeaza() {
+  const prompt = document.getElementById("prompt").value.trim();
+  const rezultat = document.getElementById("rezultat");
+  if (!prompt) return (rezultat.textContent = "⚠️ Introdu un meci valid");
+
+  rezultat.textContent = "⏳ Se analizează...";
 
   try {
-    const res = await fetch("/api/chat", {
+    const r = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ home, away, when, urls })
+      body: JSON.stringify({ prompt }),
     });
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || "Eroare API");
-
-    out.textContent = data.analysis || "(fără conținut)";
-    const srcList = (data.usedUrls || []).map(u => `• ${u}`).join("\n");
-    const srcMeta = (data.sources || []).map(s =>
-      s.ok ? `✓ ${s.source} [${s.confidence}]` : `✗ ${s.url} — ${s.error}`
-    ).join("\n");
-
-    meta.textContent = `Surse (${(data.usedUrls || []).length}):\n${srcList}\n\nStatus extrageri:\n${srcMeta}`;
-  } catch (err) {
-    out.textContent = `Eroare: ${String(err)}`;
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-like.addEventListener("click", () => saveFeedback(true));
-dislike.addEventListener("click", () => saveFeedback(false));
-
-copyBtn.addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(out.textContent || "");
-    feedback.textContent = "Analiza a fost copiată în clipboard.";
+    const d = await r.json();
+    rezultat.textContent = d.reply || `❌ ${d.error}`;
+    salveazaIstoric(prompt, d.reply);
   } catch {
-    feedback.textContent = "Nu am putut copia conținutul.";
+    rezultat.textContent = "💥 Eroare rețea - verifică conexiunea";
   }
-});
-
-function saveFeedback(positive) {
-  const entry = { ts: Date.now(), positive, sample: (out.textContent || "").slice(0, 160) };
-  const arr = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
-  arr.push(entry);
-  localStorage.setItem(LS_KEY, JSON.stringify(arr));
-  feedback.textContent = positive ? "Feedback salvat: 👍" : "Feedback salvat: 👎";
 }
+
+// Inițializează istoricul la încărcare
+afiseazaIstoric();
