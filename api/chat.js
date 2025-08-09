@@ -1,65 +1,50 @@
-// api/chat.js
+// api/chat.js — fără BOT_URL; importă direct colectarea surselor.
 import axios from "axios";
+import { getSources } from "./fetchSources.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o";
 const TIMEOUT = 30000;
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
 const t = (s) => String(s || "").replace(/\s+/g, " ").trim();
 
-async function fetchSourcesViaAPI({ homeTeam, awayTeam, urls }) {
-  const base = process.env.BOT_URL || "http://localhost:3000";
-  const url = `${base}/api/fetchSources`;
-  const { data } = await axios.post(url, { homeTeam, awayTeam, urls }, {
-    timeout: TIMEOUT,
-    headers: { "User-Agent": UA, "Content-Type": "application/json" },
-    validateStatus: (st) => st >= 200 && st < 500,
-  });
-  if (!data?.ok) throw new Error(data?.error || "fetchSources failed");
-  return data;
-}
-
-function formatSourceLine(name, pred) {
-  const clean = t(pred || "");
-  return clean ? `${name} — ${clean}` : `${name} — Date indisponibile`;
-}
+function fmt(name, pred){ const c=t(pred||""); return c?`${name} — ${c}`:`${name} — Date indisponibile`; }
 
 function buildPrompt({ homeTeam, awayTeam, matchDate, sources }) {
-  const sSporty   = formatSourceLine("SportyTrader", sources?.sportytrader?.prediction);
-  const sPredictz = formatSourceLine("PredictZ",    sources?.predictz?.prediction);
-  const sForebet  = formatSourceLine("Forebet",     sources?.forebet?.prediction);
+  const s1 = fmt("SportyTrader", sources?.sportytrader?.prediction);
+  const s2 = fmt("PredictZ",     sources?.predictz?.prediction);
+  const s3 = fmt("Forebet",      sources?.forebet?.prediction);
 
   const system = `
-Ești un analist disciplinat. Reguli:
-- Folosești EXCLUSIV textele furnizate din surse, fără invenții.
+Ești analist strict. Reguli:
+- Folosești doar textele furnizate; nu inventa.
 - Română, fără caractere asiatice.
-- EXACT 10 puncte, fiecare pe rând nou, cu simboluri: ✅ ⚠️ 📊 🎯 (fără cuvântul "Simbol").
-- Punctul 1 reproduce textual liniile de mai jos (nu reformula).
-- Menții ordinea echipelor: ${homeTeam} vs ${awayTeam}.
-- Dacă lipsesc date, scrie "Date indisponibile".
+- EXACT 10 puncte, fiecare pe rând nou, cu simboluri ✅ ⚠️ 📊 🎯 (fără cuvântul "Simbol").
+- Punctul 1 reproduce textual liniile din surse (nu reformula).
+- Menții ordinea: ${homeTeam} vs ${awayTeam}.
+- Dacă lipsesc date: "Date indisponibile".
 `.trim();
 
   const user = `
 Meci: ${homeTeam} vs ${awayTeam}
 Data: ${matchDate || "Date indisponibile"}
 
-SURSE & PREDICȚII (TEXT EXACT):
-- ${sSporty}
-- ${sPredictz}
-- ${sForebet}
+SURSE (TEXT EXACT):
+- ${s1}
+- ${s2}
+- ${s3}
 
-Scrie analiză în EXACT 10 puncte:
-1) ✅ Surse & Predicții — SportyTrader — ${sources?.sportytrader?.prediction ? t(sources.sportytrader.prediction) : "Date indisponibile"} | PredictZ — ${sources?.predictz?.prediction ? t(sources.predictz.prediction) : "Date indisponibile"} | Forebet — ${sources?.forebet?.prediction ? t(sources.forebet.prediction) : "Date indisponibile"}
-2) 📊 Medie/Consens (doar din cele 3 surse; dacă nu e consens, scrie "Dispersie" sau "Date insuficiente").
-3) 📊 Impact pe pronostic (dacă nu ai date reale: "Date indisponibile").
-4) 📊 Formă recentă (ultimele 5) — "Date indisponibile" dacă nu există.
-5) 📊 Absențe — "Date indisponibile" dacă nu există.
-6) 📊 Golgheteri/penalty — "Date indisponibile" dacă nu există.
+Scrie în EXACT 10 puncte:
+1) ✅ Surse & Predicții — ${s1} | ${s2} | ${s3}
+2) 📊 Medie/Consens (doar din cele 3 surse; dacă nu e consens: "Dispersie" / "Date insuficiente").
+3) 📊 Impact pe pronostic — "Date indisponibile" dacă nu ai date.
+4) 📊 Formă (ultimele 5) — "Date indisponibile" dacă lipsesc.
+5) 📊 Absențe — "Date indisponibile" dacă lipsesc.
+6) 📊 Golgheteri/penalty — "Date indisponibile" dacă lipsesc.
 7) 📊 Statistici: posesie, cornere, galbene, faulturi — "Date indisponibile" dacă lipsesc.
-8) 📊 Tendințe & cote — doar dacă sunt în surse, altfel "Date indisponibile".
+8) 📊 Tendințe & cote — doar dacă există; altfel "Date indisponibile".
 9) ⚠️ Riscuri specifice — "Date indisponibile" dacă nu știi.
-10) 🎯 Recomandări finale (3–5 selecții) — STRICT pe consensul 1–2; dacă nu e consens: "Date insuficiente pentru recomandări".
+10) 🎯 Recomandări finale (3–5) — STRICT pe consensul 1–2; dacă nu e consens: "Date insuficiente pentru recomandări".
 `.trim();
 
   return { system, user };
@@ -83,13 +68,17 @@ export default async function handler(req, res) {
     const { homeTeam, awayTeam, matchDate, urls } = req.body || {};
     if (!homeTeam || !awayTeam) { res.status(400).json({ error: "homeTeam and awayTeam are required" }); return; }
 
-    const src = await fetchSourcesViaAPI({ homeTeam: t(homeTeam), awayTeam: t(awayTeam), urls });
-    const { system, user } = buildPrompt({
-      homeTeam: t(homeTeam), awayTeam: t(awayTeam), matchDate: t(matchDate || ""),
-      sources: { sportytrader: src?.sources?.sportytrader || null, predictz: src?.sources?.predictz || null, forebet: src?.sources?.forebet || null }
-    });
+    // 1) Colectăm sursele DIRECT (fără BOT_URL)
+    const src = await getSources({ homeTeam: t(homeTeam), awayTeam: t(awayTeam), urls });
 
+    // 2) Prompt și completare
+    const { system, user } = buildPrompt({
+      homeTeam: t(homeTeam), awayTeam: t(awayTeam), matchDate: t(matchDate || ""), sources: src?.sources || {}
+    });
     const analysis = await askOpenAI({ system, user });
+
     res.status(200).json({ ok: true, analysis: t(analysis), sources: src?.sources || {}, links: src?.links || {} });
-  } catch (err) { res.status(500).json({ ok: false, error: err?.message || String(err) }); }
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err?.message || String(err) });
+  }
 }
