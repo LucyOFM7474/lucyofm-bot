@@ -1,14 +1,12 @@
 {
-  "name": "lucyofm-analize-meciuri",
-  "version": "1.0.0",
+  "name": "lucyofm-bot",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
-    "build": "echo \"No build step\"",
-    "start": "vercel dev"
+    "start": "node api/chat.js"
   },
   "dependencies": {
-    "openai": "^4.52.0"
+    "openai": "^4.58.1"
   }
 }
